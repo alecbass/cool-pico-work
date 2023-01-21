@@ -24,50 +24,82 @@ use rp_pico::hal::{
     watchdog::Watchdog,
 };
 
+use crate::piicodev_rgb::PiicoDevRGB;
+
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
 #[entry]
 fn main() -> ! {
     info!("Program start");
-    let mut pac = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
-    let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    let sio = Sio::new(pac.SIO);
+    let mut peripherals: pac::Peripherals = pac::Peripherals::take().unwrap();
+
+    let core: pac::CorePeripherals = pac::CorePeripherals::take().unwrap();
+    let mut watchdog = Watchdog::new(peripherals.WATCHDOG);
+    let sio = Sio::new(peripherals.SIO);
 
     // External high-speed crystal on the pico board is 12Mhz
     let external_xtal_freq_hz = 12_000_000u32;
     let clocks = init_clocks_and_plls(
         external_xtal_freq_hz,
-        pac.XOSC,
-        pac.CLOCKS,
-        pac.PLL_SYS,
-        pac.PLL_USB,
-        &mut pac.RESETS,
+        peripherals.XOSC,
+        peripherals.CLOCKS,
+        peripherals.PLL_SYS,
+        peripherals.PLL_USB,
+        &mut peripherals.RESETS,
         &mut watchdog,
     )
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     let pins = rp_pico::Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
+        peripherals.IO_BANK0,
+        peripherals.PADS_BANK0,
         sio.gpio_bank0,
-        &mut pac.RESETS,
+        &mut peripherals.RESETS,
     );
 
-    let mut led_pin = pins.led.into_push_pull_output();
+    let i2c0 = peripherals.I2C0;
+    let resets = peripherals.RESETS;
+
+    let mut rgb = PiicoDevRGB::new(None, (i2c0, delay, pins, resets));
+    // rgb.set_pixel(2, (30, 60, 90));
+
+    rgb.i2c.flash_led();
+    // let r = rgb.power_led(true);
+    // if r.is_err() {
+    //     rgb.i2c.flash_led();
+    // } else {
+    //     rgb.i2c.flash_led();
+    // }
+    for i in 0x08..0x88 {
+        // rgb.set_i2c_addr(i).unwrap();
+        // rgb.clear().unwrap();
+        // rgb.power_led(i % 2 == 0).unwrap();
+
+        // rgb.fill(130).unwrap();
+    }
+    // rgb.set_brightness(100).unwrap();
+    // rgb.set_pixel(0, (50, 50, 50));
+    // rgb.show().unwrap();
+    // delay.delay_ms(200);
+
+    // rgb.set_pixel(0, (150, 150, 150));
+    // delay.delay_ms(200);
+
+    // rgb.set_pixel(0, (200, 200, 200));
+    // delay.delay_ms(200);
 
     loop {
         for timer in FLASH_TIMERS {
-            info!("on!");
-            led_pin.set_high().unwrap();
-            delay.delay_ms(*timer);
+            // info!("on!");
+            // led_pin.set_high().unwrap();
+            // delay.delay_ms(*timer);
 
-            info!("off!");
-            led_pin.set_low().unwrap();
-            delay.delay_ms(*timer);
+            // info!("off!");
+            // led_pin.set_low().unwrap();
+            // delay.delay_ms(*timer);
         }
     }
 }
