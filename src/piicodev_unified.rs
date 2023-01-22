@@ -69,7 +69,6 @@ impl I2CUnifiedMachine {
         for i in 0..=127 {
             let mut readbuf: [u8; 1] = [0; 1];
             let result = i2c.read(i, &mut readbuf);
-            led_pin.set_high().unwrap();
             if let Ok(_d) = result {
                 address = i;
                 break;
