@@ -1,11 +1,14 @@
-use cortex_m::{delay::Delay, prelude::_embedded_hal_blocking_i2c_Write};
+use cortex_m::{
+    delay::Delay,
+    prelude::{_embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write},
+};
 use embedded_hal::digital::v2::OutputPin;
 use fugit::RateExtU32;
 use rp_pico::{
     hal::{
         clocks::{init_clocks_and_plls, Clock, ClocksManager},
         gpio::{
-            bank0::{Gpio18, Gpio19, Gpio25, Gpio8, Gpio9},
+            bank0::{Gpio10, Gpio11, Gpio18, Gpio19, Gpio25, Gpio8, Gpio9},
             Function, Output, Pin, PushPull, I2C as GPIOI2C,
         },
         i2c, pac,
@@ -36,38 +39,51 @@ pub trait I2CBase {
 
 pub struct I2CUnifiedMachine {
     i2c: I2C<pac::I2C0, (Pin<Gpio8, Function<GPIOI2C>>, Pin<Gpio9, Function<GPIOI2C>>)>,
+    pub addr: u8,
     led_pin: Pin<Gpio25, Output<PushPull>>,
     delay: Delay,
 }
 
 // Hardware arguments whose types I don't really know about yet
-pub type HardwareArgs = (pac::I2C0, Delay, Pins, pac::RESETS);
+pub type HardwareArgs = (pac::I2C0, pac::I2C1, Delay, Pins, pac::RESETS);
 
 impl I2CUnifiedMachine {
-    pub fn new((i2c0, mut delay, pins, mut resets): HardwareArgs) -> Self {
+    pub fn new((i2c0, i2c1, mut delay, pins, mut resets): HardwareArgs) -> Self {
         let mut led_pin = pins.led.into_push_pull_output();
 
         let gpio8 = pins.gpio8.into_mode();
-        // gpio8.set_high().unwrap();
-        // delay.delay_ms(100);
-
         let gpio9 = pins.gpio9.into_mode();
-        // gpio9.set_high().unwrap();
-        // delay.delay_ms(100);
 
-        let i2c = I2C::i2c0(
+        let mut i2c = I2C::i2c0(
             i2c0,
             gpio8, // sda
             gpio9, // scl
-            400.kHz(),
+            100.kHz(),
             &mut resets,
             125_000_000.Hz(),
         );
 
-        led_pin.set_high().unwrap();
+        // Scan for the address of any device
+        // TODO: Let this work with multiple I2C devices
+        let mut address: u8 = 0;
+        for i in 0..=127 {
+            let mut readbuf: [u8; 1] = [0; 1];
+            let result = i2c.read(i, &mut readbuf);
+            led_pin.set_high().unwrap();
+            if let Ok(_d) = result {
+                address = i;
+                break;
+            }
+        }
+
+        if address != 0 {
+            // Let me know that it worked
+            led_pin.set_high().unwrap();
+        }
 
         Self {
             i2c,
+            addr: address,
             led_pin,
             delay,
         }
@@ -77,18 +93,22 @@ impl I2CUnifiedMachine {
         self.delay.delay_ms(ms);
     }
 
-    pub fn flash_led(&mut self) {
-        for _i in 0..8 {
-            self.delay.delay_ms(100);
-            self.led_pin.set_low().unwrap();
-            self.delay.delay_ms(100);
+    pub fn flash_led(&mut self, amount: Option<u32>) {
+        let flash_count = amount.unwrap_or(8);
+        for i in 0..flash_count {
+            let reverse = flash_count - i;
+            self.delay.delay_ms(reverse * 100);
             self.led_pin.set_high().unwrap();
+            self.delay.delay_ms(reverse * 100);
+            self.led_pin.set_low().unwrap();
         }
     }
 }
 
 impl I2CBase for I2CUnifiedMachine {
     fn writeto_mem(&mut self, addr: u8, memaddr: u8, buf: &[u8]) -> Result<(), i2c::Error> {
+        // memaddr is currently unused. buf should be a &[u8] format of:
+        // [memaddr, ...buf] (pretends that's formatted like JS lol)
         self.i2c.write(addr, buf)
     }
 

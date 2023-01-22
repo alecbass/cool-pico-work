@@ -42,21 +42,19 @@ fn wheel(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
 pub type PQV = (u8, u8, u8);
 
 pub struct PiicoDevRGB {
-    addr: u8,
     pub i2c: I2CUnifiedMachine,
     led: [PQV; 3],
     bright: u8,
 }
 
 impl PiicoDevRGB {
-    pub fn new(addr: Option<u8>, hardware: HardwareArgs) -> Self {
+    pub fn new(hardware: HardwareArgs) -> Self {
         let mut rgb = Self {
-            addr: addr.unwrap_or(BASE_ADDR),
             i2c: I2CUnifiedMachine::new(hardware),
             led: [(0, 0, 0), (0, 0, 0), (0, 0, 0)],
-            bright: 200,
+            bright: 40,
         };
-        rgb.set_brightness(150).unwrap();
+        rgb.set_brightness(rgb.bright).unwrap();
         rgb.show().unwrap();
         rgb
     }
@@ -66,28 +64,34 @@ impl PiicoDevRGB {
     }
 
     pub fn set_i2c_addr(&mut self, new_addr: u8) -> Result<(), i2c::Error> {
-        let result = self.i2c.writeto_mem(self.addr, REG_I2C_ADDR, &[new_addr]);
-        self.addr = new_addr;
+        let result = self
+            .i2c
+            .writeto_mem(self.i2c.addr, REG_I2C_ADDR, &[REG_I2C_ADDR, new_addr]);
+        self.i2c.addr = new_addr;
         result
     }
 
     pub fn show(&mut self) -> Result<(), i2c::Error> {
-        let mut buffer: [u8; 9] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let buffer: [u8; 10] = [
+            REG_LED_VALS,
+            self.led[0].0,
+            self.led[0].1,
+            self.led[0].2,
+            self.led[1].0,
+            self.led[1].1,
+            self.led[1].2,
+            self.led[2].0,
+            self.led[2].1,
+            self.led[2].2,
+        ];
 
-        // TODO: Return and make this better
-        let mut index: usize = 0;
-        for thing in self.led {
-            buffer[index] = thing.0;
-            buffer[index + 1] = thing.1;
-            buffer[index + 2] = thing.2;
-            index += 3;
-        }
-
-        self.i2c.writeto_mem(self.addr, REG_LED_VALS, &buffer)
+        self.i2c.writeto_mem(self.i2c.addr, REG_LED_VALS, &buffer)
     }
 
     pub fn clear(&mut self) -> Result<(), i2c::Error> {
-        let result = self.i2c.writeto_mem(self.addr, REG_CLEAR, &[0x01]);
+        let result = self
+            .i2c
+            .writeto_mem(self.i2c.addr, REG_CLEAR, &[REG_CLEAR, 0x01]);
         self.led = [(0, 0, 0), (0, 0, 0), (0, 0, 0)];
         result
     }
@@ -103,7 +107,7 @@ impl PiicoDevRGB {
         self.bright = x;
         let result = self
             .i2c
-            .writeto_mem(self.addr, REG_I2C_ADDR, &[self.bright]);
+            .writeto_mem(self.i2c.addr, REG_BRIGHT, &[REG_BRIGHT, self.bright]);
         self.i2c.delay(1);
 
         result
@@ -114,7 +118,9 @@ impl PiicoDevRGB {
             true => 1,
             false => 0,
         };
-        let result = self.i2c.writeto_mem(self.addr, REG_CTRL, &[state_value]);
+        let result = self
+            .i2c
+            .writeto_mem(self.i2c.addr, REG_CTRL, &[REG_CTRL, state_value]);
         self.i2c.delay(1);
 
         result

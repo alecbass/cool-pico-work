@@ -24,7 +24,7 @@ use rp_pico::hal::{
     watchdog::Watchdog,
 };
 
-use crate::piicodev_rgb::PiicoDevRGB;
+use crate::piicodev_rgb::{PiicoDevRGB, PQV};
 
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
@@ -63,44 +63,33 @@ fn main() -> ! {
     let i2c0 = peripherals.I2C0;
     let resets = peripherals.RESETS;
 
-    let mut rgb = PiicoDevRGB::new(None, (i2c0, delay, pins, resets));
-    // rgb.set_pixel(2, (30, 60, 90));
+    let i2c1 = peripherals.I2C1;
 
-    rgb.i2c.flash_led();
-    // let r = rgb.power_led(true);
-    // if r.is_err() {
-    //     rgb.i2c.flash_led();
-    // } else {
-    //     rgb.i2c.flash_led();
-    // }
-    for i in 0x08..0x88 {
-        // rgb.set_i2c_addr(i).unwrap();
-        // rgb.clear().unwrap();
-        // rgb.power_led(i % 2 == 0).unwrap();
+    let mut rgb = PiicoDevRGB::new((i2c0, i2c1, delay, pins, resets));
+    rgb.set_brightness(5).unwrap();
+    rgb.set_pixel(0, (255, 0, 0));
+    rgb.set_pixel(1, (0, 255, 0));
+    rgb.set_pixel(2, (0, 0, 255));
+    rgb.show().unwrap();
 
-        // rgb.fill(130).unwrap();
-    }
-    // rgb.set_brightness(100).unwrap();
-    // rgb.set_pixel(0, (50, 50, 50));
-    // rgb.show().unwrap();
-    // delay.delay_ms(200);
-
-    // rgb.set_pixel(0, (150, 150, 150));
-    // delay.delay_ms(200);
-
-    // rgb.set_pixel(0, (200, 200, 200));
-    // delay.delay_ms(200);
-
+    let mut i: u8 = 0;
     loop {
-        for timer in FLASH_TIMERS {
-            // info!("on!");
-            // led_pin.set_high().unwrap();
-            // delay.delay_ms(*timer);
+        let light: usize = i as usize % 3;
 
-            // info!("off!");
-            // led_pin.set_low().unwrap();
-            // delay.delay_ms(*timer);
+        let led: PQV;
+        if light == 0 {
+            led = (255 - i, i, 0);
+        } else if light == 1 {
+            led = (i, 255 - i, 0);
+        } else {
+            led = (i, 0, 255 - i);
         }
+
+        rgb.set_pixel(light, led);
+        rgb.i2c.delay(10);
+        rgb.show().unwrap();
+
+        i += 1;
     }
 }
 
