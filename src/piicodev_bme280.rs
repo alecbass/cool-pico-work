@@ -195,4 +195,24 @@ impl PiicoDevBME280 {
         let humi: u16 = h >> 12;
         (temp, pres, humi)
     }
+
+    pub fn values(&self) -> (u16, u16, u16) {
+        let (temp, pres, humi) = self.read_compensated_data();
+        (temp / 100, pres / 256, humi / 1024)
+    }
+
+    pub fn pressure_precision(&self) -> (f32, u16) {
+        let p: u16 = self.read_compensated_data().1;
+        let pi: f32 = (p / 256) as f32;
+        let pd: u16 = (p % 256) / 256;
+        (pi, pd)
+    }
+
+    pub fn altitude(&self, pressure_sea_level: Option<f32>) -> u16 {
+        let (pi, pd) = self.pressure_precision();
+        // let inner = ((pi + pd.into()) / 100) / pressure_sea_level.unwrap_or(1013.25);
+        // 44330 * (1 - inner * *(1.0 / 5.255))
+
+        0
+    }
 }
