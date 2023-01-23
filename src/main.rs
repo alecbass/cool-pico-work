@@ -4,8 +4,10 @@
 #![no_std]
 #![no_main]
 
+mod piicodev_bme280;
 mod piicodev_rgb;
 mod piicodev_unified;
+mod utils;
 
 use defmt::*;
 use defmt_rtt as _;
