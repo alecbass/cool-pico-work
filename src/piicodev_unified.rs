@@ -1,3 +1,4 @@
+use crate::utils::create_buffer;
 use cortex_m::{
     delay::Delay,
     prelude::{_embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write},
@@ -28,13 +29,9 @@ const SETUPI2C_STR: &'static str = ", run \"sudo curl -L https://piico.dev/i2cse
 const ADDR_SIZE: u8 = 8;
 
 pub trait I2CBase {
-    fn writeto_mem(&mut self, addr: u8, memaddr: u8, buf: &[u8]) -> Result<(), i2c::Error>;
+    fn write(&mut self, addr: u8, buf: &[u8]) -> Result<(), i2c::Error>;
 
-    fn readfrom_mem(&self, addr: u8, memaddr: u8, nbytes: u8) -> Result<(), i2c::Error>;
-
-    fn write8(&mut self, addr: u8, reg: Option<u8>, data: &[u8]) -> Result<(), i2c::Error>;
-
-    fn read16(&mut self, addr: u8, nbytes: u8, stop: bool) -> Result<(), i2c::Error>;
+    fn read(&mut self, addr: u8, buf: &mut [u8]) -> Result<(), i2c::Error>;
 }
 
 pub struct I2CUnifiedMachine {
@@ -105,30 +102,11 @@ impl I2CUnifiedMachine {
 }
 
 impl I2CBase for I2CUnifiedMachine {
-    fn writeto_mem(&mut self, addr: u8, memaddr: u8, buf: &[u8]) -> Result<(), i2c::Error> {
-        // memaddr is currently unused. buf should be a &[u8] format of:
-        // [memaddr, ...buf] (pretends that's formatted like JS lol)
+    fn write(&mut self, addr: u8, buf: &[u8]) -> Result<(), i2c::Error> {
         self.i2c.write(addr, buf)
     }
 
-    fn readfrom_mem(&self, addr: u8, memaddr: u8, nbytes: u8) -> Result<(), i2c::Error> {
-        todo!()
-    }
-
-    fn write8(&mut self, addr: u8, reg: Option<u8>, data: &[u8]) -> Result<(), i2c::Error> {
-        if let Some(_reg) = reg {
-            // TODO: should be reg + data (from Python)
-            self.i2c.write(addr, data)
-        } else {
-            self.i2c.write(addr, data)
-        }
-    }
-
-    fn read16(&mut self, addr: u8, nbytes: u8, stop: bool) -> Result<(), i2c::Error> {
-        let mut buffer: &[u8] = &[];
-
-        self.i2c.write(addr, &[])
-        // TODO: Find out why this won't pass
-        // self.i2c.read(addr, &mut buffer)
+    fn read(&mut self, addr: u8, buf: &mut [u8]) -> Result<(), i2c::Error> {
+        self.i2c.read(addr, buf)
     }
 }

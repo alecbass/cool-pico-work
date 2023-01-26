@@ -1,5 +1,4 @@
 use crate::piicodev_unified::{HardwareArgs, I2CBase, I2CUnifiedMachine};
-use core::marker::PhantomData;
 use rp_pico::hal::i2c;
 
 const BASE_ADDR: u8 = 0x08;
@@ -64,9 +63,7 @@ impl PiicoDevRGB {
     }
 
     pub fn set_i2c_addr(&mut self, new_addr: u8) -> Result<(), i2c::Error> {
-        let result = self
-            .i2c
-            .writeto_mem(self.i2c.addr, REG_I2C_ADDR, &[REG_I2C_ADDR, new_addr]);
+        let result = self.i2c.write(self.i2c.addr, &[REG_I2C_ADDR, new_addr]);
         self.i2c.addr = new_addr;
         result
     }
@@ -85,13 +82,11 @@ impl PiicoDevRGB {
             self.led[2].2,
         ];
 
-        self.i2c.writeto_mem(self.i2c.addr, REG_LED_VALS, &buffer)
+        self.i2c.write(self.i2c.addr, &buffer)
     }
 
     pub fn clear(&mut self) -> Result<(), i2c::Error> {
-        let result = self
-            .i2c
-            .writeto_mem(self.i2c.addr, REG_CLEAR, &[REG_CLEAR, 0x01]);
+        let result = self.i2c.write(self.i2c.addr, &[REG_CLEAR, 0x01]);
         self.led = [(0, 0, 0), (0, 0, 0), (0, 0, 0)];
         result
     }
@@ -105,9 +100,7 @@ impl PiicoDevRGB {
 
     pub fn set_brightness(&mut self, x: u8) -> Result<(), i2c::Error> {
         self.bright = x;
-        let result = self
-            .i2c
-            .writeto_mem(self.i2c.addr, REG_BRIGHT, &[REG_BRIGHT, self.bright]);
+        let result = self.i2c.write(self.i2c.addr, &[REG_BRIGHT, self.bright]);
         self.i2c.delay(1);
 
         result
@@ -118,9 +111,7 @@ impl PiicoDevRGB {
             true => 1,
             false => 0,
         };
-        let result = self
-            .i2c
-            .writeto_mem(self.i2c.addr, REG_CTRL, &[REG_CTRL, state_value]);
+        let result = self.i2c.write(self.i2c.addr, &[REG_CTRL, state_value]);
         self.i2c.delay(1);
 
         result
