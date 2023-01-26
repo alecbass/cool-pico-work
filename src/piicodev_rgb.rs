@@ -49,7 +49,7 @@ pub struct PiicoDevRGB {
 impl PiicoDevRGB {
     pub fn new(hardware: HardwareArgs) -> Self {
         let mut rgb = Self {
-            i2c: I2CUnifiedMachine::new(hardware),
+            i2c: I2CUnifiedMachine::new(hardware, Some(BASE_ADDR)),
             led: [(0, 0, 0), (0, 0, 0), (0, 0, 0)],
             bright: 40,
         };

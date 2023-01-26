@@ -45,7 +45,7 @@ pub struct I2CUnifiedMachine {
 pub type HardwareArgs = (pac::I2C0, pac::I2C1, Delay, Pins, pac::RESETS);
 
 impl I2CUnifiedMachine {
-    pub fn new((i2c0, i2c1, mut delay, pins, mut resets): HardwareArgs) -> Self {
+    pub fn new((i2c0, i2c1, mut delay, pins, mut resets): HardwareArgs, addr: Option<u8>) -> Self {
         let mut led_pin = pins.led.into_push_pull_output();
 
         let gpio8 = pins.gpio8.into_mode();
@@ -60,22 +60,28 @@ impl I2CUnifiedMachine {
             125_000_000.Hz(),
         );
 
-        // Scan for the address of any device
-        // TODO: Let this work with multiple I2C devices
-        let mut address: u8 = 0;
-        for i in 0..=127 {
-            let mut readbuf: [u8; 1] = [0; 1];
-            let result = i2c.read(i, &mut readbuf);
-            if let Ok(_d) = result {
-                address = i;
-                break;
+        let address: u8 = if let Some(addr) = addr {
+            addr
+        } else {
+            // Scan for the address of any device
+            // TODO: Let this work with multiple I2C devices
+            let mut address: u8 = 0;
+            for i in 0..=127 {
+                let mut readbuf: [u8; 1] = [0; 1];
+                let result = i2c.read(i, &mut readbuf);
+                if let Ok(_d) = result {
+                    address = i;
+                    break;
+                }
             }
-        }
 
-        if address != 0 {
-            // Let me know that it worked
-            led_pin.set_high().unwrap();
-        }
+            if address != 0 {
+                // Let me know that it worked
+                led_pin.set_high().unwrap();
+            }
+
+            address
+        };
 
         Self {
             i2c,

@@ -1,5 +1,5 @@
-const BUFFER_LIMIT: u8 = 16;
+const BUFFER_LIMIT: usize = 16;
 
-pub fn create_buffer() -> [u8; 16] {
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+pub fn create_buffer() -> [u8; BUFFER_LIMIT] {
+    [0; BUFFER_LIMIT]
 }
