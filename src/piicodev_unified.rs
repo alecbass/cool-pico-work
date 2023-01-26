@@ -31,7 +31,7 @@ const ADDR_SIZE: u8 = 8;
 pub trait I2CBase {
     fn write(&mut self, addr: u8, buf: &[u8]) -> Result<(), i2c::Error>;
 
-    fn read(&self, addr: u8, buf: &mut [u8]) -> Result<(), i2c::Error>;
+    fn read(&mut self, addr: u8, buf: &mut [u8]) -> Result<(), i2c::Error>;
 }
 
 pub struct I2CUnifiedMachine {
@@ -106,7 +106,7 @@ impl I2CBase for I2CUnifiedMachine {
         self.i2c.write(addr, buf)
     }
 
-    fn read(&self, addr: u8, buf: &mut [u8]) -> Result<(), i2c::Error> {
+    fn read(&mut self, addr: u8, buf: &mut [u8]) -> Result<(), i2c::Error> {
         self.i2c.read(addr, buf)
     }
 }
