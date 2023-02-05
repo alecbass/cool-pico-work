@@ -1,5 +1,6 @@
 use super::piicodev_unified::I2CUnifiedMachine;
 use crate::piicodev_unified::{HardwareArgs, I2CBase};
+use defmt::*;
 use rp_pico::hal::i2c;
 
 const BASE_ADDR: u8 = 0x3C;
@@ -68,7 +69,6 @@ impl PiicoDevSSD1306 {
             0x14,
             _SET_DISP | 0x01, // display on
         ] {
-            // on
             self.write_cmd(cmd).unwrap();
         }
     }
@@ -86,6 +86,7 @@ impl PiicoDevSSD1306 {
     }
 
     pub(self) fn write_cmd(&mut self, command: u8) -> Result<(), i2c::Error> {
+        debug!("Writing cmd {}", command);
         self.i2c.write(self.i2c.addr, &[0x80, command])
     }
 
@@ -100,7 +101,7 @@ impl PiicoDevSSD1306 {
         self.write_cmd(PAGES - 1)?;
 
         // write_data replacement
-        self.i2c.write(self.i2c.addr, &[0x40])?;
+        self.buffer[0] = 0x40;
         self.i2c.write(self.i2c.addr, &self.buffer)
     }
 
@@ -131,8 +132,8 @@ impl PiicoDevSSD1306 {
             let index: usize = ((y >> 3) * stride + x) as usize;
             let offset: u8 = y & 0x07;
 
-            buffer[index] =
-                (buffer[index] & !(0x01 << offset)) | ((u8::from(colour != 0)) << offset)
+            let new: u8 = (buffer[index] & !(0x01 << offset)) | ((u8::from(colour != 0)) << offset);
+            buffer[index] = new;
         }
 
         // let index: usize = (x + y) as usize;
@@ -140,10 +141,29 @@ impl PiicoDevSSD1306 {
         set_pixel(&mut self.buffer, WIDTH, x, y, colour)
     }
 
-    pub fn fill(&mut self, colour: u8) {
-        for i in 0..u8::MAX {
-            self.buffer[i as usize] = colour;
+    pub fn fill_rect(&mut self, x: u8, y: u8, colour: u8) {
+        let mut y = y;
+        let mut height = HEIGHT;
+        let width = WIDTH;
+        let stride = WIDTH;
+        while height > 0 {
+            let index = (y >> 3) * stride + x;
+            let offset = y & 0x07;
+            for ww in 0..width {
+                self.buffer[(index + ww) as usize] = (self.buffer[(index + ww) as usize]
+                    & !(0x01 << offset))
+                    | ((u8::from(colour != 0)) << offset);
+
+                debug!("Buffer: {:?}", self.buffer);
+            }
+
+            y += 1;
+            height -= 1;
         }
+    }
+
+    pub fn fill(&mut self, colour: u8) {
+        self.fill_rect(0, 0, colour);
     }
 
     pub fn circ(&self, x: u8, y: u8, r: u8) {

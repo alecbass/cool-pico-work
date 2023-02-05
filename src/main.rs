@@ -9,9 +9,7 @@ mod piicodev_ssd1306;
 mod piicodev_unified;
 mod utils;
 
-use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
 use panic_probe as _;
 use rp_pico::entry;
 
@@ -33,7 +31,6 @@ const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
 #[entry]
 fn main() -> ! {
-    info!("Program start");
     let mut peripherals: pac::Peripherals = pac::Peripherals::take().unwrap();
 
     let core: pac::CorePeripherals = pac::CorePeripherals::take().unwrap();
@@ -68,51 +65,16 @@ fn main() -> ! {
 
     let i2c1 = peripherals.I2C1;
 
-    let do_rgb = false;
+    let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
-    if do_rgb {
-        let mut rgb = PiicoDevRGB::new((i2c0, i2c1, delay, pins, resets));
-        rgb.set_brightness(5).unwrap();
-        rgb.set_pixel(0, (255, 0, 0));
-        rgb.set_pixel(1, (0, 255, 0));
-        rgb.set_pixel(2, (0, 0, 255));
-        rgb.show().unwrap();
-
-        let mut i: u8 = 0;
-        loop {
-            let light: usize = i as usize % 3;
-
-            let led: PQV;
-            if light == 0 {
-                led = (255 - i, i, 0);
-            } else if light == 1 {
-                led = (i, 255 - i, 0);
-            } else {
-                led = (i, 0, 255 - i);
-            }
-
-            rgb.set_pixel(light, led);
-            rgb.i2c.delay(10);
-            rgb.show().unwrap();
-
-            i += 1;
-        }
-    }
-
-    let do_oled = true;
-    if do_oled {
-        let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
-        // oled.power_on().unwrap();
-        // oled.fill(1);
-        oled.pixel(50, 50, 1);
-        oled.pixel(70, 70, 1);
-        oled.pixel(90, 90, 1);
-        oled.pixel(110, 110, 1);
-        oled.pixel(130, 130, 1);
-        // oled.pixel(20, 20, 1);
+    for i in 0..100 {
+        oled.pixel(i, i, 1);
+        // oled.i2c.delay(1);
         oled.show().unwrap();
-        oled.i2c.flash_led(Some(4));
     }
+
+    oled.show().unwrap();
+    // oled.power_off().unwrap();
 
     loop {}
 }
