@@ -1,7 +1,7 @@
 use crate::piicodev_unified::{HardwareArgs, I2CBase, I2CUnifiedMachine};
 use rp_pico::hal::i2c;
 
-const BASE_ADDR: u8 = 0x08;
+const BASE_ADDR: u8 = 0x1E; // 0x08;
 const DEV_ID: u8 = 0x84;
 const REG_DEV_ID: u8 = 0x00;
 const REG_FIRM_VER: u8 = 0x01;
