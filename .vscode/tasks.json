@@ -5,9 +5,8 @@
   "tasks": [
     {
       "label": "Cargo build",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["build"],
+      "type": "cargo",
+      "command": "build",
       "problemMatcher": ["$rustc"],
       "group": "build"
     },
