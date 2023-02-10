@@ -26,6 +26,7 @@ use rp_pico::hal::{
 
 use crate::piicodev_rgb::{PiicoDevRGB, PQV};
 use crate::piicodev_ssd1306::PiicoDevSSD1306;
+use piicodev_ssd1306::OLEDColour;
 
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
@@ -67,11 +68,15 @@ fn main() -> ! {
 
     let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
-    for i in 0..100 {
-        oled.pixel(i, i, 1);
+    for i in 50..55 {
+        // oled.pixel(i, i, OLEDColour::WHITE);
         // oled.i2c.delay(1);
-        oled.show().unwrap();
+        // oled.show().unwrap();
     }
+
+    oled.pixel(100, 100, OLEDColour::WHITE);
+    oled.pixel(110, 110, OLEDColour::WHITE);
+    oled.pixel(120, 120, OLEDColour::WHITE);
 
     oled.show().unwrap();
     // oled.power_off().unwrap();

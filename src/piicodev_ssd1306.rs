@@ -28,6 +28,21 @@ const HEIGHT: u8 = 64;
 const BUFFER_SIZE: usize = WIDTH as usize * HEIGHT as usize;
 const PAGES: u8 = HEIGHT / 8;
 
+#[derive(PartialEq)]
+pub enum OLEDColour {
+    BLACK = 0,
+    WHITE = 1,
+}
+
+impl Into<u8> for OLEDColour {
+    fn into(self) -> u8 {
+        match self {
+            Self::BLACK => 0,
+            Self::WHITE => 1,
+        }
+    }
+}
+
 pub struct PiicoDevSSD1306 {
     pub i2c: I2CUnifiedMachine,
     buffer: [u8; BUFFER_SIZE],
@@ -127,42 +142,46 @@ impl PiicoDevSSD1306 {
         self.write_cmd(_SET_SEG_REMAP | (rotate & 1))
     }
 
-    pub fn pixel(&mut self, x: u32, y: u32, colour: u8) {
-        fn set_pixel(buffer: &mut [u8], stride: u32, x: u32, y: u32, colour: u8) {
-            let index: usize = ((y >> 3) * stride + x) as usize;
-            let offset: u32 = y & 0x07;
+    pub fn pixel(&mut self, x: u8, y: u8, colour: OLEDColour) {
+        fn set_pixel(buffer: &mut [u8], stride: u8, x: u8, y: u8, colour: OLEDColour) {
+            let x_coord: u32 = x as u32;
+            let y_coord: u32 = y as u32;
+            let index: usize = ((y_coord >> 3) * stride as u32 + x_coord) as usize;
+            let offset: u32 = y_coord & 0x07;
 
-            let new: u8 = (buffer[index] & !(0x01 << offset)) | ((u8::from(colour != 0)) << offset);
+            let new: u8 = (buffer[index] & !(0x01 << offset))
+                | ((u8::from(colour != OLEDColour::BLACK)) << offset);
             buffer[index] = new;
         }
 
         // let index: usize = (x + y) as usize;
         // self.buffer[index] = colour;
-        set_pixel(&mut self.buffer, WIDTH as u32, x, y, colour)
+        set_pixel(&mut self.buffer, WIDTH, x, y, colour)
     }
 
-    pub fn fill_rect(&mut self, x: u8, y: u8, colour: u8) {
-        let mut y = y;
-        let mut height = HEIGHT;
-        let width = WIDTH;
-        let stride = WIDTH;
+    pub fn fill_rect(&mut self, x: u8, y: u8, colour: OLEDColour) {
+        let x_coord: u32 = x as u32;
+        let mut y_coord: u32 = y as u32;
+        let mut height: u8 = HEIGHT;
+        let width = WIDTH as u32;
+        let stride = WIDTH as u32;
         while height > 0 {
-            let index = (y >> 3) * stride + x;
-            let offset = y & 0x07;
+            let index: u32 = (y_coord >> 3) * stride + x_coord;
+            let offset: u8 = y & 0x07;
             for ww in 0..width {
                 self.buffer[(index + ww) as usize] = (self.buffer[(index + ww) as usize]
                     & !(0x01 << offset))
-                    | ((u8::from(colour != 0)) << offset);
+                    | ((u8::from(colour != OLEDColour::BLACK)) << offset);
 
                 debug!("Buffer: {:?}", self.buffer);
             }
 
-            y += 1;
+            y_coord += 1;
             height -= 1;
         }
     }
 
-    pub fn fill(&mut self, colour: u8) {
+    pub fn fill(&mut self, colour: OLEDColour) {
         self.fill_rect(0, 0, colour);
     }
 
