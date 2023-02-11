@@ -1,6 +1,7 @@
 use super::piicodev_unified::I2CUnifiedMachine;
 use crate::piicodev_unified::{HardwareArgs, I2CBase};
 use defmt::*;
+use libm::{cosf, sinf};
 use rp_pico::hal::i2c;
 
 const BASE_ADDR: u8 = 0x3C;
@@ -171,6 +172,24 @@ impl PiicoDevSSD1306 {
         const FULL_HEIGHT: u8 = 128;
         const FULL_WIDTH: u8 = 255;
         self.fill_rect(FULL_HEIGHT, FULL_WIDTH, 0, 0, colour);
+    }
+
+    pub fn arc(&mut self, x: u8, y: u8, r: u8, start_angle: u8, end_angle: u8) {
+        let t: u8 = 0;
+
+        let test: u8 = r * (1 - t) - 1;
+        debug!("Hello {}", test);
+        let x: f32 = x as f32;
+        let y: f32 = y as f32;
+
+        debug!("Hello {}", test);
+        for i in (r * (1 - t) - 1)..r {
+            for ta in start_angle..end_angle {
+                let x: u8 = (i as f32 * (cosf((ta as f64).to_radians() as f32) + x)) as u8;
+                let y: u8 = (i as f32 * (sinf((ta as f64).to_radians() as f32) + y)) as u8;
+                self.pixel(x, y, OLEDColour::WHITE);
+            }
+        }
     }
 
     pub fn circ(&self, x: u8, y: u8, r: u8) {

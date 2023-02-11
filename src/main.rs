@@ -68,7 +68,7 @@ fn main() -> ! {
 
     let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
-    oled.fill(OLEDColour::WHITE);
+    oled.arc(60, 60, 6, 60, 90);
     oled.show().unwrap();
     loop {}
 }
