@@ -28,7 +28,7 @@ const HEIGHT: u8 = 64;
 const BUFFER_SIZE: usize = WIDTH as usize * HEIGHT as usize;
 const PAGES: u8 = HEIGHT / 8;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum OLEDColour {
     BLACK = 0,
     WHITE = 1,
@@ -160,24 +160,10 @@ impl PiicoDevSSD1306 {
     }
 
     pub fn fill_rect(&mut self, x: u8, y: u8, colour: OLEDColour) {
-        let x_coord: u32 = x as u32;
-        let mut y_coord: u32 = y as u32;
-        let mut height: u8 = HEIGHT;
-        let width = WIDTH as u32;
-        let stride = WIDTH as u32;
-        while height > 0 {
-            let index: u32 = (y_coord >> 3) * stride + x_coord;
-            let offset: u8 = y & 0x07;
-            for ww in 0..width {
-                self.buffer[(index + ww) as usize] = (self.buffer[(index + ww) as usize]
-                    & !(0x01 << offset))
-                    | ((u8::from(colour != OLEDColour::BLACK)) << offset);
-
-                debug!("Buffer: {:?}", self.buffer);
+        for x_coord in 0..x {
+            for y_coord in 0..y {
+                self.pixel(x_coord, y_coord, colour);
             }
-
-            y_coord += 1;
-            height -= 1;
         }
     }
 
