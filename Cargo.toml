@@ -18,6 +18,9 @@ rp-pico = "0.6"
 # For unit conversions
 fugit = "0.3.6"
 
+# For mathematics
+libm = "0.2.6"
+
 
 # but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
 # sparkfun-pro-micro-rp2040 = "0.3"

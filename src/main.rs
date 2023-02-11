@@ -4,14 +4,12 @@
 #![no_std]
 #![no_main]
 
-mod piicodev_bme280;
 mod piicodev_rgb;
+mod piicodev_ssd1306;
 mod piicodev_unified;
 mod utils;
 
-use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
 use panic_probe as _;
 use rp_pico::entry;
 
@@ -27,12 +25,13 @@ use rp_pico::hal::{
 };
 
 use crate::piicodev_rgb::{PiicoDevRGB, PQV};
+use crate::piicodev_ssd1306::PiicoDevSSD1306;
+use piicodev_ssd1306::OLEDColour;
 
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
 #[entry]
 fn main() -> ! {
-    info!("Program start");
     let mut peripherals: pac::Peripherals = pac::Peripherals::take().unwrap();
 
     let core: pac::CorePeripherals = pac::CorePeripherals::take().unwrap();
@@ -67,32 +66,11 @@ fn main() -> ! {
 
     let i2c1 = peripherals.I2C1;
 
-    let mut rgb = PiicoDevRGB::new((i2c0, i2c1, delay, pins, resets));
-    rgb.set_brightness(5).unwrap();
-    rgb.set_pixel(0, (255, 0, 0));
-    rgb.set_pixel(1, (0, 255, 0));
-    rgb.set_pixel(2, (0, 0, 255));
-    rgb.show().unwrap();
+    let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
-    let mut i: u8 = 0;
-    loop {
-        let light: usize = i as usize % 3;
-
-        let led: PQV;
-        if light == 0 {
-            led = (255 - i, i, 0);
-        } else if light == 1 {
-            led = (i, 255 - i, 0);
-        } else {
-            led = (i, 0, 255 - i);
-        }
-
-        rgb.set_pixel(light, led);
-        rgb.i2c.delay(10);
-        rgb.show().unwrap();
-
-        i += 1;
-    }
+    oled.arc(60, 60, 6, 60, 90);
+    oled.show().unwrap();
+    loop {}
 }
 
 // End of file

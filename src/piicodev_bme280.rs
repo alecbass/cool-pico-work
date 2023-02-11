@@ -35,8 +35,8 @@ pub struct PiicoDevBME280 {
 }
 
 impl PiicoDevBME280 {
-    pub fn new(args: HardwareArgs) -> Self {
-        let mut i2c: I2CUnifiedMachine = I2CUnifiedMachine::new(args);
+    pub fn new(args: HardwareArgs, addr: u8) -> Self {
+        let mut i2c: I2CUnifiedMachine = I2CUnifiedMachine::new(args, Some(addr));
 
         let t_mode: u8 = 2;
         let p_mode: u8 = 5;
@@ -155,7 +155,7 @@ impl PiicoDevBME280 {
         (raw_p, raw_t, raw_h)
     }
 
-    pub fn read_compensated_data(&mut self) -> (u32, u32, u32) {
+    pub fn read_compensated_data(&mut self) -> (u16, u16, u16) {
         let (raw_t, raw_p, raw_h) = self.read_raw_data();
 
         let mut var1: u16 = ((raw_t >> 3) - (self.t1 << 1)) * (self.t2 >> 11);
@@ -172,10 +172,10 @@ impl PiicoDevBME280 {
         var1 = ((var1 * var1 * self.p3) >> 8) + ((var1 * self.p2) << 12);
         var1 = (((1 << 47) + var1) * self.p1) >> 33;
 
-        let pres: u32 = if var1 == 0 {
+        let pres: u16 = if var1 == 0 {
             0
         } else {
-            let p: u32 = (((1048576 - raw_p) << 31) - var2) * 3125;
+            let p: u16 = (((1048576 - raw_p) << 31) - var2) * 3125;
             var1 = (self.p9 * (p >> 13) * (p >> 13)) >> 25;
             var2 = (self.p8 * p) >> 19;
             ((p + var1 + var2) >> 8) + (self.p7 << 4)
