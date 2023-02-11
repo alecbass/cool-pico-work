@@ -159,16 +159,18 @@ impl PiicoDevSSD1306 {
         set_pixel(&mut self.buffer, WIDTH, x, y, colour)
     }
 
-    pub fn fill_rect(&mut self, x: u8, y: u8, colour: OLEDColour) {
+    pub fn fill_rect(&mut self, x: u8, y: u8, x_offset: u8, y_offset: u8, colour: OLEDColour) {
         for x_coord in 0..x {
             for y_coord in 0..y {
-                self.pixel(x_coord, y_coord, colour);
+                self.pixel(x_coord + x_offset, y_coord + y_offset, colour);
             }
         }
     }
 
     pub fn fill(&mut self, colour: OLEDColour) {
-        self.fill_rect(0, 0, colour);
+        const FULL_HEIGHT: u8 = 128;
+        const FULL_WIDTH: u8 = 255;
+        self.fill_rect(FULL_HEIGHT, FULL_WIDTH, 0, 0, colour);
     }
 
     pub fn circ(&self, x: u8, y: u8, r: u8) {
