@@ -28,7 +28,7 @@ use rp_pico::hal::{
 use crate::piicodev_rgb::{PiicoDevRGB, PQV};
 use crate::piicodev_ssd1306::PiicoDevSSD1306;
 use defmt::debug;
-use piicodev_buzzer::notes::{note_to_frequency, Note, EIGHT_MELODIES};
+use piicodev_buzzer::notes::{note_to_frequency, Note, EIGHT_MELODIES, HARMONY};
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_ssd1306::OLEDColour;
 
@@ -83,7 +83,7 @@ fn main() -> ! {
         PiicoDevBuzzer::new((i2c0, i2c1, delay, pins, resets), Some(BuzzerVolume::High));
 
     let mut is_led_on: bool = true;
-    for (tone, duration) in EIGHT_MELODIES {
+    for (tone, duration) in HARMONY {
         buzzer.power_led(is_led_on).unwrap();
         is_led_on = !is_led_on;
 
