@@ -25,7 +25,7 @@ const _SET_CHARGE_PUMP: u8 = 0x8D;
 const WIDTH: u8 = 128;
 const HEIGHT: u8 = 64;
 
-const BUFFER_SIZE: usize = WIDTH as usize * HEIGHT as usize;
+const BUFFER_SIZE: usize = (WIDTH as usize * HEIGHT as usize) / 2; // 4096
 const PAGES: u8 = HEIGHT / 8;
 
 #[derive(PartialEq, Clone, Copy)]
