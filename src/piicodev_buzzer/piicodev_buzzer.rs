@@ -1,6 +1,9 @@
-use super::piicodev_unified::{HardwareArgs, I2CUnifiedMachine};
 use crate::piicodev_unified::I2CBase;
+use crate::piicodev_unified::{HardwareArgs, I2CUnifiedMachine};
 use rp_pico::hal::i2c;
+
+use super::notes::{note_to_frequency, Note};
+use defmt::debug;
 
 const _BASE_ADDR: u8 = 0x5C;
 const _DEV_ID: u8 = 0x51;
@@ -31,7 +34,7 @@ impl Into<u8> for BuzzerVolume {
 }
 
 pub struct PiicoDevBuzzer {
-    i2c: I2CUnifiedMachine,
+    pub i2c: I2CUnifiedMachine,
 }
 
 impl PiicoDevBuzzer {
@@ -46,14 +49,23 @@ impl PiicoDevBuzzer {
         buzzer
     }
 
-    pub fn tone(&mut self, freq: u32, dur: u8) -> Result<(), i2c::Error> {
+    pub fn tone(&mut self, note: Note, dur: u16) -> Result<(), i2c::Error> {
+        // Using u16 as the buzzer module requires 2 big-endian bytes to be passed in as payload
+        let freq: u16 = note_to_frequency(note) as u16;
         let frequency: &[u8] = &freq.to_be_bytes();
+        let duration: &[u8] = &dur.to_be_bytes();
 
-        // NOTE: Not sure if three writes will work
-        self.i2c
-            .write(self.i2c.addr, &[_REG_TONE, freq as u8 + dur])?;
-        self.i2c.write(self.i2c.addr, frequency)?;
-        self.i2c.write(self.i2c.addr, &[dur])
+        // [address, frequency1, frequency2, duration1, duration2]
+        let payload: [u8; 5] = [
+            _REG_TONE,
+            frequency[0],
+            frequency[1],
+            duration[0],
+            duration[1],
+        ];
+        debug!("lol {} {:?}", freq, payload);
+
+        self.i2c.write(self.i2c.addr, &payload)
     }
 
     pub fn volume(&mut self, vol: BuzzerVolume) -> Result<(), i2c::Error> {
