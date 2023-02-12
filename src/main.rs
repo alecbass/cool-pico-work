@@ -4,6 +4,7 @@
 #![no_std]
 #![no_main]
 
+mod piicodev_buzzer;
 mod piicodev_rgb;
 mod piicodev_ssd1306;
 mod piicodev_unified;
@@ -26,6 +27,9 @@ use rp_pico::hal::{
 
 use crate::piicodev_rgb::{PiicoDevRGB, PQV};
 use crate::piicodev_ssd1306::PiicoDevSSD1306;
+use defmt::debug;
+use piicodev_buzzer::notes::{note_to_frequency, Note, EIGHT_MELODIES, HARMONY};
+use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_ssd1306::OLEDColour;
 
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
@@ -66,10 +70,27 @@ fn main() -> ! {
 
     let i2c1 = peripherals.I2C1;
 
-    let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
+    // let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
-    oled.arc(60, 60, 6, 60, 90);
-    oled.show().unwrap();
+    // oled.arc(60, 60, 6, 60, 90);
+    // oled.show().unwrap();
+
+    //
+    // Buzzer
+    //
+
+    let mut buzzer =
+        PiicoDevBuzzer::new((i2c0, i2c1, delay, pins, resets), Some(BuzzerVolume::High));
+
+    let mut is_led_on: bool = true;
+    for (tone, duration) in HARMONY {
+        buzzer.power_led(is_led_on).unwrap();
+        is_led_on = !is_led_on;
+
+        buzzer.tone(tone, duration / 4).unwrap();
+        buzzer.i2c.delay((duration / 4) as u32);
+    }
+
     loop {}
 }
 
