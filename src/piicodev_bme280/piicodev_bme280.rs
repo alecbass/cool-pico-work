@@ -4,6 +4,8 @@ use crate::{
 };
 use rp_pico::hal::i2c;
 
+const BASE_ADDR: u8 = 0x77;
+
 /** A tuple representing temperature, pressure and humidity readings */
 type TempPresHumi = (u32, u32, u32);
 
@@ -35,7 +37,7 @@ pub struct PiicoDevBME280 {
 
 impl PiicoDevBME280 {
     pub fn new(args: HardwareArgs, addr: u8) -> Self {
-        let mut i2c: I2CUnifiedMachine = I2CUnifiedMachine::new(args, Some(addr));
+        let mut i2c: I2CUnifiedMachine = I2CUnifiedMachine::new(args, Some(BASE_ADDR));
 
         let t_mode: u8 = 2;
         let p_mode: u8 = 5;
