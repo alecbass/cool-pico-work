@@ -100,8 +100,9 @@ fn main() -> ! {
     let mut sensor: PiicoDevBME280 = PiicoDevBME280::new((i2c0, i2c1, delay, pins, resets));
 
     loop {
-        let reading = sensor.read_raw_data();
-        info!("READINGGG {:?}", reading);
+        let reading = sensor.values();
+        // let values = sensor.values();
+        info!("READINGGG {:?} {:?}", reading, reading);
     }
 }
 
