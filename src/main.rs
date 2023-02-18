@@ -4,6 +4,7 @@
 #![no_std]
 #![no_main]
 
+mod piicodev_bme280;
 mod piicodev_buzzer;
 mod piicodev_rgb;
 mod piicodev_ssd1306;
