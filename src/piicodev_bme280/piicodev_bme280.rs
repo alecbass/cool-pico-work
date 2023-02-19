@@ -11,8 +11,9 @@ const BASE_ADDR: u8 = 0x77;
 /** A tuple representing temperature, pressure and humidity readings */
 type TempPresHumi = (i64, i64, i64);
 
-pub struct PiicoDevBME280 {
-    i2c: I2CUnifiedMachine,
+pub struct PiicoDevBME280<'a> {
+    addr: u8,
+    i2c: &'a mut I2CUnifiedMachine,
     t_mode: i64,
     p_mode: i64,
     h_mode: i64,
@@ -37,8 +38,8 @@ pub struct PiicoDevBME280 {
     h6: i64,
 }
 
-impl PiicoDevBME280 {
-    pub fn new(args: HardwareArgs) -> Self {
+impl<'a> PiicoDevBME280<'a> {
+    pub fn new(i2c: &'a mut I2CUnifiedMachine) -> Self {
         fn short(num: i64) -> i64 {
             if num > 32767 {
                 return num - 65537;
@@ -46,7 +47,9 @@ impl PiicoDevBME280 {
 
             num
         }
-        let mut i2c: I2CUnifiedMachine = I2CUnifiedMachine::new(args, Some(BASE_ADDR));
+
+        // NOTE: This can be set up to be dynamic
+        let addr: u8 = BASE_ADDR;
 
         let t_mode: i64 = 2;
         let p_mode: i64 = 5;
@@ -55,39 +58,40 @@ impl PiicoDevBME280 {
 
         // The Piicodev libraries expect Python 32-bit integers, so while these number casts
         // seem inefficient, it's to mimic the expected behaviour
-        let t1: i64 = Self::read_16(0x88, &mut i2c).unwrap() as i64;
-        let t2: i64 = Self::read_16(0x8A, &mut i2c).unwrap() as i64;
-        let t3: i64 = Self::read_16(0x8C, &mut i2c).unwrap() as i64;
+        let t1: i64 = Self::read_16(addr, 0x88, i2c).unwrap() as i64;
+        let t2: i64 = Self::read_16(addr, 0x8A, i2c).unwrap() as i64;
+        let t3: i64 = Self::read_16(addr, 0x8C, i2c).unwrap() as i64;
 
-        let p1: i64 = Self::read_16(0x8E, &mut i2c).unwrap() as i64;
-        let p2: i64 = short(Self::read_16(0x90, &mut i2c).unwrap() as i64);
-        let p3: i64 = short(Self::read_16(0x92, &mut i2c).unwrap() as i64);
-        let p4: i64 = short(Self::read_16(0x94, &mut i2c).unwrap() as i64);
-        let p5: i64 = short(Self::read_16(0x96, &mut i2c).unwrap() as i64);
-        let p6: i64 = short(Self::read_16(0x98, &mut i2c).unwrap() as i64);
-        let p7: i64 = short(Self::read_16(0x9A, &mut i2c).unwrap() as i64);
-        let p8: i64 = short(Self::read_16(0x9C, &mut i2c).unwrap() as i64);
-        let p9: i64 = short(Self::read_16(0x9E, &mut i2c).unwrap() as i64);
+        let p1: i64 = Self::read_16(addr, 0x8E, i2c).unwrap() as i64;
+        let p2: i64 = short(Self::read_16(addr, 0x90, i2c).unwrap() as i64);
+        let p3: i64 = short(Self::read_16(addr, 0x92, i2c).unwrap() as i64);
+        let p4: i64 = short(Self::read_16(addr, 0x94, i2c).unwrap() as i64);
+        let p5: i64 = short(Self::read_16(addr, 0x96, i2c).unwrap() as i64);
+        let p6: i64 = short(Self::read_16(addr, 0x98, i2c).unwrap() as i64);
+        let p7: i64 = short(Self::read_16(addr, 0x9A, i2c).unwrap() as i64);
+        let p8: i64 = short(Self::read_16(addr, 0x9C, i2c).unwrap() as i64);
+        let p9: i64 = short(Self::read_16(addr, 0x9E, i2c).unwrap() as i64);
 
-        let h1: i64 = Self::read_8(0xA1, &mut i2c).unwrap() as i64;
-        let h2: i64 = Self::read_16(0xE1, &mut i2c).unwrap() as i64;
-        let h3: i64 = Self::read_8(0xE3, &mut i2c).unwrap() as i64;
-        let a: i64 = Self::read_8(0xE5, &mut i2c).unwrap() as i64;
-        let h4: i64 = ((Self::read_8(0xE4, &mut i2c).unwrap() as i64) << 4) + (a % 16);
-        let h5: i64 = ((Self::read_8(0xE6, &mut i2c).unwrap() as i64) << 4) + (a >> 4);
-        let mut h6: i64 = Self::read_8(0xE7, &mut i2c).unwrap() as i64;
+        let h1: i64 = Self::read_8(addr, 0xA1, i2c).unwrap() as i64;
+        let h2: i64 = Self::read_16(addr, 0xE1, i2c).unwrap() as i64;
+        let h3: i64 = Self::read_8(addr, 0xE3, i2c).unwrap() as i64;
+        let a: i64 = Self::read_8(addr, 0xE5, i2c).unwrap() as i64;
+        let h4: i64 = ((Self::read_8(addr, 0xE4, i2c).unwrap() as i64) << 4) + (a % 16);
+        let h5: i64 = ((Self::read_8(addr, 0xE6, i2c).unwrap() as i64) << 4) + (a >> 4);
+        let mut h6: i64 = Self::read_8(addr, 0xE7, i2c).unwrap() as i64;
 
         if h6 > 127 {
             h6 -= 256;
         }
 
-        i2c.write(i2c.addr, &[0xF2, h_mode as u8]).unwrap();
+        i2c.write(addr, &[0xF2, h_mode as u8]).unwrap();
         i2c.delay(2);
-        i2c.write(i2c.addr, &[0xF4, 0x24]).unwrap();
+        i2c.write(addr, &[0xF4, 0x24]).unwrap();
         i2c.delay(2);
-        i2c.write(i2c.addr, &[0xF5, (iir as u8) << 2]).unwrap();
+        i2c.write(addr, &[0xF5, (iir as u8) << 2]).unwrap();
 
         Self {
+            addr,
             i2c,
             t_mode,
             p_mode,
@@ -114,23 +118,27 @@ impl PiicoDevBME280 {
         }
     }
 
-    pub(self) fn read_8(reg: u8, i2c: &mut I2CUnifiedMachine) -> Result<u8, i2c::Error> {
+    pub(self) fn read_8(addr: u8, reg: u8, i2c: &mut I2CUnifiedMachine) -> Result<u8, i2c::Error> {
         let mut buffer: [u8; 1] = [0; 1];
 
-        i2c.write(i2c.addr, &[reg])?;
+        i2c.write(addr, &[reg])?;
 
-        match i2c.read(i2c.addr, &mut buffer) {
+        match i2c.read(addr, &mut buffer) {
             Ok(()) => Ok(buffer[0]),
             Err(e) => Err(e),
         }
     }
 
-    pub(self) fn read_16(reg: u8, i2c: &mut I2CUnifiedMachine) -> Result<u16, i2c::Error> {
+    pub(self) fn read_16(
+        addr: u8,
+        reg: u8,
+        i2c: &mut I2CUnifiedMachine,
+    ) -> Result<u16, i2c::Error> {
         let mut buffer: [u8; 2] = [0; 2];
 
-        i2c.write(i2c.addr, &[reg]).unwrap();
+        i2c.write(addr, &[reg]).unwrap();
 
-        match i2c.read(i2c.addr, &mut buffer) {
+        match i2c.read(addr, &mut buffer) {
             Ok(()) => Ok(u16::from_le_bytes([buffer[0], buffer[1]])),
             Err(e) => Err(e),
         }
@@ -142,7 +150,7 @@ impl PiicoDevBME280 {
         // self._write8(0xF4, (self.p_mode << 5 | self.t_mode << 2 | 1))
         self.i2c
             .write(
-                self.i2c.addr,
+                self.addr,
                 &[
                     0xF4,
                     ((self.p_mode << 5) as u8 | (self.t_mode << 2) as u8 | 1),
@@ -167,32 +175,32 @@ impl PiicoDevBME280 {
 
         self.i2c.delay(1 + sleep_time / 1000);
 
-        while (Self::read_16(0xF3, &mut self.i2c).unwrap() & 0x08) != 0 {
+        while (Self::read_16(self.addr, 0xF3, &mut self.i2c).unwrap() & 0x08) != 0 {
             self.i2c.delay(1);
         }
 
         // Calculate pressure
         let raw_p: i32 = i32::from_be_bytes([
             0,
-            Self::read_8(0xF7, &mut self.i2c).unwrap(),
-            Self::read_8(0xF8, &mut self.i2c).unwrap(),
-            Self::read_8(0xF9, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xF7, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xF8, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xF9, &mut self.i2c).unwrap(),
         ]) >> 4;
 
         // Calculate temperature
         let raw_t: i32 = i32::from_be_bytes([
             0,
-            Self::read_8(0xFA, &mut self.i2c).unwrap(),
-            Self::read_8(0xFB, &mut self.i2c).unwrap(),
-            Self::read_8(0xFC, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xFA, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xFB, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xFC, &mut self.i2c).unwrap(),
         ]) >> 4;
 
         // Calculate humidity
         let raw_h: i32 = i32::from_be_bytes([
             0,
             0,
-            Self::read_8(0xFD, &mut self.i2c).unwrap(),
-            Self::read_8(0xFE, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xFD, &mut self.i2c).unwrap(),
+            Self::read_8(self.addr, 0xFE, &mut self.i2c).unwrap(),
         ]);
 
         info!("hehe {} {} {}", raw_t, raw_p, raw_h);

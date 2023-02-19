@@ -40,16 +40,18 @@ fn wheel(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
 // Colour properties. Not sure what they stand for
 pub type PQV = (u8, u8, u8);
 
-pub struct PiicoDevRGB {
-    pub i2c: I2CUnifiedMachine,
+pub struct PiicoDevRGB<'a> {
+    addr: u8,
+    pub i2c: &'a mut I2CUnifiedMachine,
     led: [PQV; 3],
     bright: u8,
 }
 
-impl PiicoDevRGB {
-    pub fn new(hardware: HardwareArgs) -> Self {
+impl<'a> PiicoDevRGB<'a> {
+    pub fn new(i2c: &'a mut I2CUnifiedMachine) -> Self {
         let mut rgb = Self {
-            i2c: I2CUnifiedMachine::new(hardware, Some(BASE_ADDR)),
+            addr: BASE_ADDR,
+            i2c,
             led: [(0, 0, 0), (0, 0, 0), (0, 0, 0)],
             bright: 40,
         };
@@ -63,8 +65,8 @@ impl PiicoDevRGB {
     }
 
     pub fn set_i2c_addr(&mut self, new_addr: u8) -> Result<(), i2c::Error> {
-        let result = self.i2c.write(self.i2c.addr, &[REG_I2C_ADDR, new_addr]);
-        self.i2c.addr = new_addr;
+        let result = self.i2c.write(self.addr, &[REG_I2C_ADDR, new_addr]);
+        self.addr = new_addr;
         result
     }
 
@@ -82,11 +84,11 @@ impl PiicoDevRGB {
             self.led[2].2,
         ];
 
-        self.i2c.write(self.i2c.addr, &buffer)
+        self.i2c.write(self.addr, &buffer)
     }
 
     pub fn clear(&mut self) -> Result<(), i2c::Error> {
-        let result = self.i2c.write(self.i2c.addr, &[REG_CLEAR, 0x01]);
+        let result = self.i2c.write(self.addr, &[REG_CLEAR, 0x01]);
         self.led = [(0, 0, 0), (0, 0, 0), (0, 0, 0)];
         result
     }
@@ -100,7 +102,7 @@ impl PiicoDevRGB {
 
     pub fn set_brightness(&mut self, x: u8) -> Result<(), i2c::Error> {
         self.bright = x;
-        let result = self.i2c.write(self.i2c.addr, &[REG_BRIGHT, self.bright]);
+        let result = self.i2c.write(self.addr, &[REG_BRIGHT, self.bright]);
         self.i2c.delay(1);
 
         result
@@ -111,7 +113,7 @@ impl PiicoDevRGB {
             true => 1,
             false => 0,
         };
-        let result = self.i2c.write(self.i2c.addr, &[REG_CTRL, state_value]);
+        let result = self.i2c.write(self.addr, &[REG_CTRL, state_value]);
         self.i2c.delay(1);
 
         result

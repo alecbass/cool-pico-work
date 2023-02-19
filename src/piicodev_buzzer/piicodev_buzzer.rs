@@ -33,23 +33,26 @@ impl Into<u8> for BuzzerVolume {
     }
 }
 
-pub struct PiicoDevBuzzer {
-    pub i2c: I2CUnifiedMachine,
+pub struct PiicoDevBuzzer<'a> {
+    addr: u8,
+    i2c: &'a mut I2CUnifiedMachine,
 }
 
-impl PiicoDevBuzzer {
-    pub fn new(args: HardwareArgs, volume: Option<BuzzerVolume>) -> Self {
-        let mut i2c = I2CUnifiedMachine::new(args, Some(_BASE_ADDR));
-        i2c.write(i2c.addr, &[_REG_LED, 0x01]).unwrap();
+impl<'a> PiicoDevBuzzer<'a> {
+    pub fn new(i2c: &'a mut I2CUnifiedMachine, volume: Option<BuzzerVolume>) -> Self {
+        i2c.write(_BASE_ADDR, &[_REG_LED, 0x01]).unwrap();
 
-        let mut buzzer = Self { i2c };
+        let mut buzzer = Self {
+            i2c,
+            addr: _BASE_ADDR,
+        };
         buzzer
             .volume(volume.unwrap_or(BuzzerVolume::High))
             .expect("Failed to initialise PiicoDevBuzzer");
         buzzer
     }
 
-    pub fn tone(&mut self, note: Note, dur: u16) -> Result<(), i2c::Error> {
+    pub fn tone(&mut self, note: &Note, dur: u16) -> Result<(), i2c::Error> {
         // Using u16 as the buzzer module requires 2 big-endian bytes to be passed in as payload
         let freq: u16 = note_to_frequency(note) as u16;
         let frequency: &[u8] = &freq.to_be_bytes();
@@ -65,33 +68,33 @@ impl PiicoDevBuzzer {
         ];
         debug!("lol {} {:?}", freq, payload);
 
-        self.i2c.write(self.i2c.addr, &payload)
+        self.i2c.write(_BASE_ADDR, &payload)
     }
 
     pub fn volume(&mut self, vol: BuzzerVolume) -> Result<(), i2c::Error> {
-        self.i2c.write(self.i2c.addr, &[_REG_VOLUME, vol.into()])
+        self.i2c.write(self.addr, &[_REG_VOLUME, vol.into()])
     }
 
     pub fn read_firmware(&mut self) -> Result<[u8; 2], i2c::Error> {
         let mut v: [u8; 2] = [0, 0];
-        self.i2c.read(self.i2c.addr, &mut v).map(|()| v)
+        self.i2c.read(self.addr, &mut v).map(|()| v)
     }
 
     pub fn read_status(&mut self) -> Result<[u8; 1], i2c::Error> {
         let mut status: [u8; 1] = [_REG_STATUS];
-        self.i2c.read(self.i2c.addr, &mut status).map(|()| status)
+        self.i2c.read(self.addr, &mut status).map(|()| status)
     }
 
     pub fn read_id(&mut self) -> Result<u8, i2c::Error> {
         let mut id_buffer: [u8; 1] = [_REG_DEV_ID];
         self.i2c
-            .read(self.i2c.addr, &mut id_buffer)
+            .read(self.addr, &mut id_buffer)
             .map(|()| id_buffer[0])
     }
 
     pub fn power_led(&mut self, on: bool) -> Result<(), i2c::Error> {
         self.i2c.write(
-            self.i2c.addr,
+            self.addr,
             &[
                 _REG_LED,
                 match on {
@@ -100,5 +103,16 @@ impl PiicoDevBuzzer {
                 },
             ],
         )
+    }
+
+    pub fn play_song(&mut self, notes: &[(Note, u16)]) {
+        let mut is_led_on = true;
+        for (tone, duration) in notes {
+            self.power_led(is_led_on).unwrap();
+            is_led_on = !is_led_on;
+
+            self.tone(tone, duration / 4).unwrap();
+            self.i2c.delay((duration / 4) as u32);
+        }
     }
 }

@@ -51,8 +51,8 @@ pub enum Note {
     B6S = 95,
 }
 
-pub fn note_to_frequency(key: Note) -> f32 {
-    let note: f32 = key as u32 as f32;
+pub fn note_to_frequency(key: &Note) -> f32 {
+    let note: f32 = *key as u32 as f32;
 
     // 2 ** ((key - 69) / 12) * 440;
     let x2: f32 = 2.0;
