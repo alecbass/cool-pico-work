@@ -1,5 +1,6 @@
 use libm::powf;
 
+#[derive(Clone, Copy)]
 pub enum Note {
     Rest = 0,
     C3 = 48,

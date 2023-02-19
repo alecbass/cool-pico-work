@@ -3,6 +3,7 @@ use crate::piicodev_unified::{HardwareArgs, I2CUnifiedMachine};
 use rp_pico::hal::i2c;
 
 use super::notes::{note_to_frequency, Note};
+use core::cell::RefCell;
 use defmt::debug;
 
 const _BASE_ADDR: u8 = 0x5C;
@@ -35,12 +36,14 @@ impl Into<u8> for BuzzerVolume {
 
 pub struct PiicoDevBuzzer<'a> {
     addr: u8,
-    i2c: &'a mut I2CUnifiedMachine,
+    i2c: &'a RefCell<I2CUnifiedMachine>,
 }
 
 impl<'a> PiicoDevBuzzer<'a> {
-    pub fn new(i2c: &'a mut I2CUnifiedMachine, volume: Option<BuzzerVolume>) -> Self {
-        i2c.write(_BASE_ADDR, &[_REG_LED, 0x01]).unwrap();
+    pub fn new(i2c: &'a RefCell<I2CUnifiedMachine>, volume: Option<BuzzerVolume>) -> Self {
+        i2c.borrow_mut()
+            .write(_BASE_ADDR, &[_REG_LED, 0x01])
+            .unwrap();
 
         let mut buzzer = Self {
             i2c,
@@ -66,34 +69,39 @@ impl<'a> PiicoDevBuzzer<'a> {
             duration[0],
             duration[1],
         ];
-        debug!("lol {} {:?}", freq, payload);
 
-        self.i2c.write(_BASE_ADDR, &payload)
+        self.i2c.borrow_mut().write(_BASE_ADDR, &payload)
     }
 
     pub fn volume(&mut self, vol: BuzzerVolume) -> Result<(), i2c::Error> {
-        self.i2c.write(self.addr, &[_REG_VOLUME, vol.into()])
+        self.i2c
+            .borrow_mut()
+            .write(self.addr, &[_REG_VOLUME, vol.into()])
     }
 
     pub fn read_firmware(&mut self) -> Result<[u8; 2], i2c::Error> {
         let mut v: [u8; 2] = [0, 0];
-        self.i2c.read(self.addr, &mut v).map(|()| v)
+        self.i2c.borrow_mut().read(self.addr, &mut v).map(|()| v)
     }
 
     pub fn read_status(&mut self) -> Result<[u8; 1], i2c::Error> {
         let mut status: [u8; 1] = [_REG_STATUS];
-        self.i2c.read(self.addr, &mut status).map(|()| status)
+        self.i2c
+            .borrow_mut()
+            .read(self.addr, &mut status)
+            .map(|()| status)
     }
 
     pub fn read_id(&mut self) -> Result<u8, i2c::Error> {
         let mut id_buffer: [u8; 1] = [_REG_DEV_ID];
         self.i2c
+            .borrow_mut()
             .read(self.addr, &mut id_buffer)
             .map(|()| id_buffer[0])
     }
 
     pub fn power_led(&mut self, on: bool) -> Result<(), i2c::Error> {
-        self.i2c.write(
+        self.i2c.borrow_mut().write(
             self.addr,
             &[
                 _REG_LED,
@@ -112,7 +120,7 @@ impl<'a> PiicoDevBuzzer<'a> {
             is_led_on = !is_led_on;
 
             self.tone(tone, duration / 4).unwrap();
-            self.i2c.delay((duration / 4) as u32);
+            self.i2c.borrow_mut().delay((duration / 4) as u32);
         }
     }
 }

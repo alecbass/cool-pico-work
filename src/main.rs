@@ -27,13 +27,12 @@ use rp_pico::hal::{
     I2C,
 };
 
-use core::cell::{RefCell, self};
+use core::cell::{self, RefCell};
 use fugit::RateExtU32;
 use piicodev_bme280::{piicodev_bme280::PiicoDevBME280, reading::Reading};
 use piicodev_buzzer::notes::{note_to_frequency, Note, EIGHT_MELODIES, HARMONY};
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_unified::{HardwareArgs, I2CUnifiedMachine, GPIO89I2C};
-use alloc::boxed::Box;
 
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
@@ -85,7 +84,7 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
-    let mut i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay));
+    let i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay));
 
     // let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
@@ -97,14 +96,13 @@ fn main() -> ! {
     // Buzzer
     //
 
-    let mut buzzer = PiicoDevBuzzer::new(mutable_i2c.get_mut(), Some(BuzzerVolume::High));
-    Box::new
+    let mut buzzer = PiicoDevBuzzer::new(&mutable_i2c, Some(BuzzerVolume::High));
 
     //
     // Atmospheric Sensor
     //
 
-    let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(mutable_i2c.as_ptr());
+    let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&mutable_i2c);
 
     loop {
         let reading = sensor.values();
@@ -123,8 +121,9 @@ fn main() -> ! {
 
         reading.report();
 
-        if reading.temperature > 27.0 {
+        if reading.temperature > 25.0 {
             buzzer.play_song(&[(Note::A4, 1000), (Note::A5, 1000), (Note::A6, 1000)]);
+            // buzzer.play_song(&HARMONY);
         }
     }
 }
