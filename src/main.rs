@@ -102,7 +102,7 @@ fn main() -> ! {
     loop {
         let reading = sensor.values();
         // let values = sensor.values();
-        info!("READINGGG {:?} {:?}", reading, reading);
+        info!("READINGGG {:?}", reading);
     }
 }
 

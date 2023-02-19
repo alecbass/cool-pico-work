@@ -102,9 +102,9 @@ impl PiicoDevBME280 {
     }
 
     pub(self) fn read_8(reg: u8, i2c: &mut I2CUnifiedMachine) -> Result<u8, i2c::Error> {
-        let mut buffer: [u8; 16] = create_buffer();
+        let mut buffer: [u8; 1] = [0; 1];
 
-        i2c.write(i2c.addr, &[reg]).unwrap();
+        i2c.write(i2c.addr, &[reg])?;
 
         match i2c.read(i2c.addr, &mut buffer) {
             Ok(()) => Ok(buffer[0]),
@@ -113,29 +113,41 @@ impl PiicoDevBME280 {
     }
 
     pub(self) fn read_16(reg: u8, i2c: &mut I2CUnifiedMachine) -> Result<u16, i2c::Error> {
-        let mut buffer: [u8; 16] = create_buffer();
+        let mut buffer: [u8; 2] = [0; 2];
 
         i2c.write(i2c.addr, &[reg]).unwrap();
 
         match i2c.read(i2c.addr, &mut buffer) {
-            Ok(()) => Ok(buffer[0] as u16 + buffer[1] as u16 * 256),
+            Ok(()) => Ok(u16::from_le_bytes([buffer[0], buffer[1]])),
             Err(e) => Err(e),
         }
     }
 
     pub fn read_raw_data(&mut self) -> TempPresHumi {
-        let low_amounts: [i64; 5] = [1, 2, 3, 4, 5];
+        // The PiicoDev _write8 method just wraps bytes into buffers and writes them
+        // self._write8(0xF4, (self.p_mode << 5 | self.t_mode << 2 | 1))
+        self.i2c
+            .write(
+                self.i2c.addr,
+                &[
+                    0xF4,
+                    ((self.p_mode << 5) as u8 | (self.t_mode << 2) as u8 | 1),
+                ],
+            )
+            .unwrap();
+
+        const LOW_AMOUNTS: [i64; 5] = [1, 2, 3, 4, 5];
         let mut sleep_time: u32 = 1250;
 
-        if low_amounts.contains(&self.t_mode) {
+        if LOW_AMOUNTS.contains(&self.t_mode) {
             sleep_time += 2300 * (1 << self.t_mode);
         }
 
-        if low_amounts.contains(&self.p_mode) {
+        if LOW_AMOUNTS.contains(&self.p_mode) {
             sleep_time += 575 + (2300 * (1 << self.p_mode));
         }
 
-        if low_amounts.contains(&self.h_mode) {
+        if LOW_AMOUNTS.contains(&self.h_mode) {
             sleep_time += 575 + (2300 * (1 << self.h_mode))
         }
 
@@ -151,7 +163,7 @@ impl PiicoDevBME280 {
         //     | Self::read_8(0xF9, &mut self.i2c).unwrap() as u32)
         //     >> 4;
 
-        let raw_p: i32 = i32::from_le_bytes([
+        let raw_p: i32 = i32::from_be_bytes([
             0,
             Self::read_8(0xF7, &mut self.i2c).unwrap(),
             Self::read_8(0xF8, &mut self.i2c).unwrap(),
@@ -186,7 +198,7 @@ impl PiicoDevBME280 {
             0,
             Self::read_8(0xFD, &mut self.i2c).unwrap(),
             Self::read_8(0xFE, &mut self.i2c).unwrap(),
-        ]) as i32;
+        ]);
 
         info!("hehe {} {} {}", raw_t, raw_p, raw_h);
         (raw_t as i64, raw_p as i64, raw_h as i64)
