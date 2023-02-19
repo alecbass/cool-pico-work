@@ -146,23 +146,30 @@ impl PiicoDevBME280 {
         }
 
         // Combine pressure bits
-        let raw_p: u32 = (((Self::read_8(0xF7, &mut self.i2c).unwrap()) as u32) << 16
-            | ((Self::read_8(0xF8, &mut self.i2c).unwrap()) as u32) << 8
-            | Self::read_8(0xF9, &mut self.i2c).unwrap() as u32)
-            >> 4;
+        // let raw_p: u32 = (((Self::read_8(0xF7, &mut self.i2c).unwrap()) as u32) << 16
+        //     | ((Self::read_8(0xF8, &mut self.i2c).unwrap()) as u32) << 8
+        //     | Self::read_8(0xF9, &mut self.i2c).unwrap() as u32)
+        //     >> 4;
 
-        // let raw_p: i32 = i32::from_le_bytes([
-        //     0,
-        //     Self::read_8(0xF7, &mut self.i2c).unwrap(),
-        //     Self::read_8(0xF8, &mut self.i2c).unwrap(),
-        //     Self::read_8(0xF9, &mut self.i2c).unwrap(),
-        // ]);
+        let raw_p: i32 = i32::from_le_bytes([
+            0,
+            Self::read_8(0xF7, &mut self.i2c).unwrap(),
+            Self::read_8(0xF8, &mut self.i2c).unwrap(),
+            Self::read_8(0xF9, &mut self.i2c).unwrap(),
+        ]) >> 4;
 
         // Combine temperature bits
-        let raw_t: i32 = (((Self::read_8(0xFA, &mut self.i2c).unwrap()) as i32) << 16
-            | ((Self::read_8(0xFB, &mut self.i2c).unwrap()) as i32) << 8
-            | Self::read_8(0xFC, &mut self.i2c).unwrap() as i32)
-            >> 4;
+        // let raw_t: i32 = (((Self::read_8(0xFA, &mut self.i2c).unwrap()) as i32) << 16
+        //     | ((Self::read_8(0xFB, &mut self.i2c).unwrap()) as i32) << 8
+        //     | Self::read_8(0xFC, &mut self.i2c).unwrap() as i32)
+        //     >> 4;
+
+        let raw_t: i32 = i32::from_be_bytes([
+            0,
+            Self::read_8(0xFA, &mut self.i2c).unwrap(),
+            Self::read_8(0xFB, &mut self.i2c).unwrap(),
+            Self::read_8(0xFC, &mut self.i2c).unwrap(),
+        ]) >> 4;
 
         // let raw_t: i32 = i32::from_le_bytes([
         //     0,
@@ -171,16 +178,17 @@ impl PiicoDevBME280 {
         //     Self::read_8(0xFC, &mut self.i2c).unwrap(),
         // ]);
         // Combine humidity bits
-        let raw_h: i32 = ((Self::read_8(0xFD, &mut self.i2c).unwrap()) as i32) << 8
-            | Self::read_8(0xFE, &mut self.i2c).unwrap() as i32;
+        // let raw_h: i32 = ((Self::read_8(0xFD, &mut self.i2c).unwrap()) as i32) << 8
+        //     | Self::read_8(0xFE, &mut self.i2c).unwrap() as i32;
 
-        // let raw_h: i32 = i32::from_le_bytes([
-        // 0,
-        // 0,
-        //     Self::read_8(0xFD, &mut self.i2c).unwrap(),
-        //     Self::read_8(0xFE, &mut self.i2c).unwrap(),
-        // ]) as i32;
+        let raw_h: i32 = i32::from_be_bytes([
+            0,
+            0,
+            Self::read_8(0xFD, &mut self.i2c).unwrap(),
+            Self::read_8(0xFE, &mut self.i2c).unwrap(),
+        ]) as i32;
 
+        info!("hehe {} {} {}", raw_t, raw_p, raw_h);
         (raw_t as i64, raw_p as i64, raw_h as i64)
     }
 
