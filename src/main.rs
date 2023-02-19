@@ -91,18 +91,19 @@ fn main() -> ! {
     // oled.arc(60, 60, 6, 60, 90);
     // oled.show().unwrap();
 
-    let mutable_i2c: RefCell<I2CUnifiedMachine> = RefCell::new(i2c_machine);
+    let i2c_machine_shared: RefCell<I2CUnifiedMachine> = RefCell::new(i2c_machine);
+
     //
     // Buzzer
     //
 
-    let mut buzzer = PiicoDevBuzzer::new(&mutable_i2c, Some(BuzzerVolume::High));
+    let mut buzzer = PiicoDevBuzzer::new(&i2c_machine_shared, Some(BuzzerVolume::High));
 
     //
     // Atmospheric Sensor
     //
 
-    let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&mutable_i2c);
+    let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&i2c_machine_shared);
 
     loop {
         let reading = sensor.values();
