@@ -218,7 +218,6 @@ impl PiicoDevBME280 {
                 >> 14);
         h = h - (((((h >> 15) * (h >> 15)) >> 7) * self.h1) >> 4);
         if h < 0 {
-            // TODO: a i32 < 0 cannot happen. Will this cause issues?
             h = 0;
         }
 
@@ -233,9 +232,9 @@ impl PiicoDevBME280 {
     pub fn values(&mut self) -> (f32, f32, f32) {
         let (temp, pres, humi) = self.read_compensated_data();
         (
-            (temp / 100) as f32,
-            (pres / 256) as f32,
-            (humi / 1024) as f32,
+            ((temp as f32) / 100.0),
+            ((pres as f32) / 256.0),
+            ((humi as f32) / 1024.0),
         )
     }
 
