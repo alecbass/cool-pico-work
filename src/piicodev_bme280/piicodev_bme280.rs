@@ -3,6 +3,7 @@ use crate::{
     utils::create_buffer,
 };
 use defmt::*;
+use libm::powf;
 use rp_pico::hal::i2c;
 
 const BASE_ADDR: u8 = 0x77;
@@ -38,6 +39,13 @@ pub struct PiicoDevBME280 {
 
 impl PiicoDevBME280 {
     pub fn new(args: HardwareArgs) -> Self {
+        fn short(num: i64) -> i64 {
+            if num > 32767 {
+                return num - 65537;
+            }
+
+            num
+        }
         let mut i2c: I2CUnifiedMachine = I2CUnifiedMachine::new(args, Some(BASE_ADDR));
 
         let t_mode: i64 = 2;
@@ -52,14 +60,14 @@ impl PiicoDevBME280 {
         let t3: i64 = Self::read_16(0x8C, &mut i2c).unwrap() as i64;
 
         let p1: i64 = Self::read_16(0x8E, &mut i2c).unwrap() as i64;
-        let p2: i64 = Self::read_16(0x90, &mut i2c).unwrap() as i64;
-        let p3: i64 = Self::read_16(0x92, &mut i2c).unwrap() as i64;
-        let p4: i64 = Self::read_16(0x94, &mut i2c).unwrap() as i64;
-        let p5: i64 = Self::read_16(0x96, &mut i2c).unwrap() as i64;
-        let p6: i64 = Self::read_16(0x98, &mut i2c).unwrap() as i64;
-        let p7: i64 = Self::read_16(0x9A, &mut i2c).unwrap() as i64;
-        let p8: i64 = Self::read_16(0x9C, &mut i2c).unwrap() as i64;
-        let p9: i64 = Self::read_16(0x9E, &mut i2c).unwrap() as i64;
+        let p2: i64 = short(Self::read_16(0x90, &mut i2c).unwrap() as i64);
+        let p3: i64 = short(Self::read_16(0x92, &mut i2c).unwrap() as i64);
+        let p4: i64 = short(Self::read_16(0x94, &mut i2c).unwrap() as i64);
+        let p5: i64 = short(Self::read_16(0x96, &mut i2c).unwrap() as i64);
+        let p6: i64 = short(Self::read_16(0x98, &mut i2c).unwrap() as i64);
+        let p7: i64 = short(Self::read_16(0x9A, &mut i2c).unwrap() as i64);
+        let p8: i64 = short(Self::read_16(0x9C, &mut i2c).unwrap() as i64);
+        let p9: i64 = short(Self::read_16(0x9E, &mut i2c).unwrap() as i64);
 
         let h1: i64 = Self::read_8(0xA1, &mut i2c).unwrap() as i64;
         let h2: i64 = Self::read_16(0xE1, &mut i2c).unwrap() as i64;
@@ -253,19 +261,14 @@ impl PiicoDevBME280 {
     }
 
     pub fn altitude(&mut self, pressure_sea_level: Option<f32>) -> f32 {
-        /** Bad method for exponentiation */
-        fn power_float(val: f32, amount: f32) -> f32 {
-            let mut result: f32 = 1.0;
-
-            for i in 1..amount as u32 {
-                result *= val;
-            }
-
-            result
-        }
-
+        const SEA_LEVEL_PRESSURE: f32 = 1013.25;
         let (pi, pd) = self.pressure_precision();
-        let inner: f32 = ((pi + pd as f32) / 100.0) / pressure_sea_level.unwrap_or(1013.25);
-        44330.0 * (1.0 - power_float(inner, 1.0 / 5.255))
+
+        44330.0
+            * (1.0
+                - powf(
+                    ((pi + pd as f32) / 100.0) / pressure_sea_level.unwrap_or(SEA_LEVEL_PRESSURE),
+                    1.0 / 5.255,
+                ))
     }
 }

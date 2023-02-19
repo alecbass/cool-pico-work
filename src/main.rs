@@ -29,7 +29,7 @@ use rp_pico::hal::{
 use crate::piicodev_rgb::{PiicoDevRGB, PQV};
 use crate::piicodev_ssd1306::PiicoDevSSD1306;
 use defmt::{debug, info};
-use piicodev_bme280::piicodev_bme280::PiicoDevBME280;
+use piicodev_bme280::{piicodev_bme280::PiicoDevBME280, reading::Reading};
 use piicodev_buzzer::notes::{note_to_frequency, Note, EIGHT_MELODIES, HARMONY};
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_ssd1306::OLEDColour;
@@ -101,8 +101,20 @@ fn main() -> ! {
 
     loop {
         let reading = sensor.values();
-        // let values = sensor.values();
-        info!("READINGGG {:?}", reading);
+        let (temperature, pressure, humidity) = reading;
+
+        let pressure: f32 = pressure / 100.0; // convert air pressure from pascals to hPa
+
+        let altitude: f32 = sensor.altitude(None);
+
+        let reading: Reading = Reading {
+            temperature,
+            pressure,
+            humidity,
+            altitude,
+        };
+
+        reading.report();
     }
 }
 
