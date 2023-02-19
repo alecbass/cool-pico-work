@@ -61,12 +61,17 @@ impl PiicoDevBME280 {
         let p8: i64 = Self::read_16(0x9C, &mut i2c).unwrap() as i64;
         let p9: i64 = Self::read_16(0x9E, &mut i2c).unwrap() as i64;
 
-        let h1: i64 = Self::read_8(0xE5, &mut i2c).unwrap() as i64;
+        let h1: i64 = Self::read_8(0xA1, &mut i2c).unwrap() as i64;
         let h2: i64 = Self::read_16(0xE1, &mut i2c).unwrap() as i64;
         let h3: i64 = Self::read_8(0xE3, &mut i2c).unwrap() as i64;
-        let h4: i64 = Self::read_8(0xE4, &mut i2c).unwrap() as i64;
-        let h5: i64 = Self::read_8(0xE6, &mut i2c).unwrap() as i64;
-        let h6: i64 = Self::read_8(0xE7, &mut i2c).unwrap() as i64;
+        let a: i64 = Self::read_8(0xE5, &mut i2c).unwrap() as i64;
+        let h4: i64 = ((Self::read_8(0xE4, &mut i2c).unwrap() as i64) << 4) + (a % 16);
+        let h5: i64 = ((Self::read_8(0xE6, &mut i2c).unwrap() as i64) << 4) + (a >> 4);
+        let mut h6: i64 = Self::read_8(0xE7, &mut i2c).unwrap() as i64;
+
+        if h6 > 127 {
+            h6 -= 256;
+        }
 
         i2c.write(i2c.addr, &[0xF2, h_mode as u8]).unwrap();
         i2c.delay(2);
@@ -124,6 +129,7 @@ impl PiicoDevBME280 {
     }
 
     pub fn read_raw_data(&mut self) -> TempPresHumi {
+        // Trigger the module to take a measurement
         // The PiicoDev _write8 method just wraps bytes into buffers and writes them
         // self._write8(0xF4, (self.p_mode << 5 | self.t_mode << 2 | 1))
         self.i2c
@@ -157,12 +163,7 @@ impl PiicoDevBME280 {
             self.i2c.delay(1);
         }
 
-        // Combine pressure bits
-        // let raw_p: u32 = (((Self::read_8(0xF7, &mut self.i2c).unwrap()) as u32) << 16
-        //     | ((Self::read_8(0xF8, &mut self.i2c).unwrap()) as u32) << 8
-        //     | Self::read_8(0xF9, &mut self.i2c).unwrap() as u32)
-        //     >> 4;
-
+        // Calculate pressure
         let raw_p: i32 = i32::from_be_bytes([
             0,
             Self::read_8(0xF7, &mut self.i2c).unwrap(),
@@ -170,12 +171,7 @@ impl PiicoDevBME280 {
             Self::read_8(0xF9, &mut self.i2c).unwrap(),
         ]) >> 4;
 
-        // Combine temperature bits
-        // let raw_t: i32 = (((Self::read_8(0xFA, &mut self.i2c).unwrap()) as i32) << 16
-        //     | ((Self::read_8(0xFB, &mut self.i2c).unwrap()) as i32) << 8
-        //     | Self::read_8(0xFC, &mut self.i2c).unwrap() as i32)
-        //     >> 4;
-
+        // Calculate temperature
         let raw_t: i32 = i32::from_be_bytes([
             0,
             Self::read_8(0xFA, &mut self.i2c).unwrap(),
@@ -183,16 +179,7 @@ impl PiicoDevBME280 {
             Self::read_8(0xFC, &mut self.i2c).unwrap(),
         ]) >> 4;
 
-        // let raw_t: i32 = i32::from_le_bytes([
-        //     0,
-        //     Self::read_8(0xFA, &mut self.i2c).unwrap(),
-        //     Self::read_8(0xFB, &mut self.i2c).unwrap(),
-        //     Self::read_8(0xFC, &mut self.i2c).unwrap(),
-        // ]);
-        // Combine humidity bits
-        // let raw_h: i32 = ((Self::read_8(0xFD, &mut self.i2c).unwrap()) as i32) << 8
-        //     | Self::read_8(0xFE, &mut self.i2c).unwrap() as i32;
-
+        // Calculate humidity
         let raw_h: i32 = i32::from_be_bytes([
             0,
             0,
