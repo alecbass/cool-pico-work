@@ -44,12 +44,13 @@ impl Into<u8> for OLEDColour {
     }
 }
 
-pub struct PiicoDevSSD1306 {
-    pub i2c: I2CUnifiedMachine,
+pub struct PiicoDevSSD1306<'a> {
+    addr: u8,
+    pub i2c: &'a mut I2CUnifiedMachine,
     buffer: [u8; BUFFER_SIZE],
 }
 
-impl PiicoDevSSD1306 {
+impl<'a> PiicoDevSSD1306<'a> {
     fn init_display(&mut self) {
         for cmd in [
             _SET_DISP, // display off
@@ -89,11 +90,9 @@ impl PiicoDevSSD1306 {
         }
     }
 
-    pub fn new(args: HardwareArgs) -> Self {
-        // TODO: Find fixed address
-        let i2c = I2CUnifiedMachine::new(args, Some(BASE_ADDR));
-
+    pub fn new(i2c: &'a mut I2CUnifiedMachine) -> Self {
         let mut oled = Self {
+            addr: BASE_ADDR,
             i2c,
             buffer: [0; BUFFER_SIZE],
         };
@@ -103,7 +102,7 @@ impl PiicoDevSSD1306 {
 
     pub(self) fn write_cmd(&mut self, command: u8) -> Result<(), i2c::Error> {
         debug!("Writing cmd {}", command);
-        self.i2c.write(self.i2c.addr, &[0x80, command])
+        self.i2c.write(self.addr, &[0x80, command])
     }
 
     pub fn show(&mut self) -> Result<(), i2c::Error> {
@@ -118,7 +117,7 @@ impl PiicoDevSSD1306 {
 
         // write_data replacement
         self.buffer[0] = 0x40;
-        self.i2c.write(self.i2c.addr, &self.buffer)
+        self.i2c.write(self.addr, &self.buffer)
     }
 
     pub fn power_off(&mut self) -> Result<(), i2c::Error> {

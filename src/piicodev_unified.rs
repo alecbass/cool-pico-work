@@ -9,6 +9,7 @@ use rp_pico::{
     hal::{
         clocks::{init_clocks_and_plls, Clock, ClocksManager},
         gpio::{
+            self,
             bank0::{Gpio10, Gpio11, Gpio18, Gpio19, Gpio25, Gpio8, Gpio9},
             Function, Output, Pin, PushPull, I2C as GPIOI2C,
         },
@@ -17,6 +18,7 @@ use rp_pico::{
         watchdog::Watchdog,
         I2C,
     },
+    pac::I2C0,
     Pins,
 };
 
@@ -34,76 +36,30 @@ pub trait I2CBase {
     fn read(&mut self, addr: u8, buf: &mut [u8]) -> Result<(), i2c::Error>;
 }
 
+/** I2C implemented over GPIO pins 8 and 9 */
+pub type GPIO89I2C = I2C<
+    pac::I2C0,
+    (
+        gpio::Pin<gpio::bank0::Gpio8, gpio::Function<rp_pico::hal::gpio::I2C>>,
+        gpio::Pin<gpio::bank0::Gpio9, gpio::Function<rp_pico::hal::gpio::I2C>>,
+    ),
+>;
+
 pub struct I2CUnifiedMachine {
-    i2c: I2C<pac::I2C0, (Pin<Gpio8, Function<GPIOI2C>>, Pin<Gpio9, Function<GPIOI2C>>)>,
-    pub addr: u8,
-    led_pin: Pin<Gpio25, Output<PushPull>>,
+    i2c: GPIO89I2C,
     delay: Delay,
 }
 
 // Hardware arguments whose types I don't really know about yet
-pub type HardwareArgs = (pac::I2C0, pac::I2C1, Delay, Pins, pac::RESETS);
+pub type HardwareArgs<'a> = (GPIO89I2C, Delay);
 
 impl I2CUnifiedMachine {
-    pub fn new((i2c0, i2c1, mut delay, pins, mut resets): HardwareArgs, addr: Option<u8>) -> Self {
-        let mut led_pin = pins.led.into_push_pull_output();
-
-        let gpio8 = pins.gpio8.into_mode();
-        let gpio9 = pins.gpio9.into_mode();
-
-        let mut i2c = I2C::i2c0(
-            i2c0,
-            gpio8, // sda
-            gpio9, // scl
-            100.kHz(),
-            &mut resets,
-            125_000_000.Hz(),
-        );
-
-        let address: u8 = if let Some(addr) = addr {
-            addr
-        } else {
-            // Scan for the address of any device
-            // TODO: Let this work with multiple I2C devices
-            let mut address: u8 = 0;
-            for i in 0..=127 {
-                let mut readbuf: [u8; 1] = [0; 1];
-                let result = i2c.read(i, &mut readbuf);
-                if let Ok(_d) = result {
-                    address = i;
-                    break;
-                }
-            }
-
-            if address != 0 {
-                // Let me know that it worked
-                led_pin.set_high().unwrap();
-            }
-
-            address
-        };
-
-        Self {
-            i2c,
-            addr: address,
-            led_pin,
-            delay,
-        }
+    pub fn new((i2c, mut delay): HardwareArgs) -> Self {
+        Self { i2c, delay }
     }
 
     pub fn delay(&mut self, ms: u32) {
         self.delay.delay_ms(ms);
-    }
-
-    pub fn flash_led(&mut self, amount: Option<u32>) {
-        let flash_count = amount.unwrap_or(8);
-        for i in 0..flash_count {
-            let reverse = flash_count - i;
-            self.delay.delay_ms(reverse * 100);
-            self.led_pin.set_high().unwrap();
-            self.delay.delay_ms(reverse * 100);
-            self.led_pin.set_low().unwrap();
-        }
     }
 }
 
