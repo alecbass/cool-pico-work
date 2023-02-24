@@ -1,11 +1,9 @@
 use crate::{
-    piicodev_unified::{HardwareArgs, I2CBase, I2CUnifiedMachine},
-    utils::create_buffer,
+    byte_reader::ByteReader,
+    piicodev_unified::{I2CBase, I2CUnifiedMachine},
 };
 use core::cell::{RefCell, RefMut};
-use defmt::*;
 use libm::powf;
-use rp_pico::hal::i2c;
 
 const BASE_ADDR: u8 = 0x77;
 
@@ -118,36 +116,6 @@ impl<'a> PiicoDevBME280<'a> {
             h4,
             h5,
             h6,
-        }
-    }
-
-    pub(self) fn read_8(
-        addr: u8,
-        reg: u8,
-        i2c: &mut RefMut<I2CUnifiedMachine>,
-    ) -> Result<u8, i2c::Error> {
-        let mut buffer: [u8; 1] = [0; 1];
-
-        i2c.write(addr, &[reg])?;
-
-        match i2c.read(addr, &mut buffer) {
-            Ok(()) => Ok(buffer[0]),
-            Err(e) => Err(e),
-        }
-    }
-
-    pub(self) fn read_16(
-        addr: u8,
-        reg: u8,
-        i2c: &mut RefMut<I2CUnifiedMachine>,
-    ) -> Result<u16, i2c::Error> {
-        let mut buffer: [u8; 2] = [0; 2];
-
-        i2c.write(addr, &[reg]).unwrap();
-
-        match i2c.read(addr, &mut buffer) {
-            Ok(()) => Ok(u16::from_le_bytes([buffer[0], buffer[1]])),
-            Err(e) => Err(e),
         }
     }
 
@@ -287,3 +255,5 @@ impl<'a> PiicoDevBME280<'a> {
                 ))
     }
 }
+
+impl<'a> ByteReader for PiicoDevBME280<'a> {}

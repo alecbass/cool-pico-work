@@ -4,6 +4,7 @@
 #![no_std]
 #![no_main]
 
+mod byte_reader;
 mod piicodev_bme280;
 mod piicodev_buzzer;
 mod piicodev_rgb;
