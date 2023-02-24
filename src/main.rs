@@ -10,6 +10,7 @@ mod piicodev_buzzer;
 mod piicodev_rgb;
 mod piicodev_ssd1306;
 mod piicodev_unified;
+mod piicodev_vl53l1x;
 mod utils;
 
 use defmt_rtt as _;
