@@ -103,30 +103,36 @@ fn main() -> ! {
     // Atmospheric Sensor
     //
 
-    let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&i2c_machine_shared);
+    const DO_BUZZER: bool = false;
 
-    loop {
-        let reading = sensor.values();
-        let (temperature, pressure, humidity) = reading;
+    if DO_BUZZER {
+        let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&i2c_machine_shared);
 
-        let pressure: f32 = pressure / 100.0; // convert air pressure from pascals to hPa
+        loop {
+            let reading = sensor.values();
+            let (temperature, pressure, humidity) = reading;
 
-        let altitude: f32 = sensor.altitude(None);
+            let pressure: f32 = pressure / 100.0; // convert air pressure from pascals to hPa
 
-        let reading: Reading = Reading {
-            temperature,
-            pressure,
-            humidity,
-            altitude,
-        };
+            let altitude: f32 = sensor.altitude(None);
 
-        reading.report();
+            let reading: Reading = Reading {
+                temperature,
+                pressure,
+                humidity,
+                altitude,
+            };
 
-        if reading.temperature > 25.0 {
-            buzzer.play_song(&[(Note::A4, 1000), (Note::A5, 1000), (Note::A6, 1000)]);
-            // buzzer.play_song(&HARMONY);
+            reading.report();
+
+            if reading.temperature > 25.0 {
+                buzzer.play_song(&[(Note::A4, 1000), (Note::A5, 1000), (Note::A6, 1000)]);
+                // buzzer.play_song(&HARMONY);
+            }
         }
     }
+
+    loop {}
 }
 
 // End of file
