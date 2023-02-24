@@ -1,3 +1,10 @@
+use crate::{
+    byte_reader::ByteReader,
+    piicodev_unified::{I2CBase, I2CUnifiedMachine},
+};
+use core::cell::{RefCell, RefMut};
+use rp_pico::hal::i2c;
+
 const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
     0x00, // 0x2d : set bit 2 and 5 to 1 for fast plus mode (1MHz I2C), else don't touch */
     0x00, // 0x2e : bit 0 if I2C pulled up at 1.8V, else set bit 0 to 1 (pull up at AVDD) */
@@ -91,3 +98,41 @@ const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
     0x01, // 0x86 : clear interrupt, use ClearInterrupt() */
     0x40, // 0x87 : start ranging, use StartRanging() or StopRanging(), If you want an automatic start after VL53L1X_init() call, put 0x40 in location 0x87 */
 ];
+
+const BASE_ADDR: u8 = 0x29;
+
+pub struct PiicoDevVL53L1X<'a> {
+    pub addr: u8,
+    i2c: &'a RefCell<I2CUnifiedMachine>,
+}
+
+impl<'a> PiicoDevVL53L1X<'a> {
+    pub fn new(addr: Option<u8>, i2c: &'a RefCell<I2CUnifiedMachine>) -> Self {
+        let addr: u8 = addr.unwrap_or(BASE_ADDR);
+
+        // NOTE: The Python library has a check for compat_ind >= 1 here. I don't know what it does
+
+        let sensor: Self = Self { addr, i2c };
+        sensor.reset().unwrap();
+
+        let mut i2c_mut: RefMut<I2CUnifiedMachine> = i2c.borrow_mut();
+
+        // Measurement is started; assumes MM1 and MM2 are disabled
+        let value_to_write: u16 = Self::read_16(addr, 0x0022, &mut i2c_mut).unwrap() * 4;
+        Self::write_reg_16_bit(addr, 0x001E, value_to_write, &mut i2c_mut).unwrap();
+
+        sensor
+    }
+
+    fn read_model_id(&self) -> Result<u16, i2c::Error> {
+        Self::read_16(self.addr, 0x010F, &mut self.i2c.borrow_mut())
+    }
+
+    fn reset(&self) -> Result<(), i2c::Error> {
+        Self::write_reg_8_bit(self.addr, 0x0000, 0x01, &mut self.i2c.borrow_mut())
+    }
+
+    fn read(&self) {}
+}
+
+impl<'a> ByteReader for PiicoDevVL53L1X<'a> {}
