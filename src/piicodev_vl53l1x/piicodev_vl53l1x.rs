@@ -100,6 +100,8 @@ const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
 ];
 
 const BASE_ADDR: u8 = 0x29;
+// Used for the read() method
+const READ_BUFFER_SIZE: usize = 17;
 
 pub struct PiicoDevVL53L1X<'a> {
     pub addr: u8,
@@ -132,7 +134,62 @@ impl<'a> PiicoDevVL53L1X<'a> {
         Self::write_reg_8_bit(self.addr, 0x0000, 0x01, &mut self.i2c.borrow_mut())
     }
 
-    fn read(&self) {}
+    fn read_17_bytes(&self, reg: u16) -> Result<[u8; READ_BUFFER_SIZE], i2c::Error> {
+        let mut buffer: [u8; READ_BUFFER_SIZE] = [0; READ_BUFFER_SIZE];
+
+        let reg_bytes: [u8; 2] = reg.to_le_bytes();
+
+        let i2c_mut: RefMut<I2CUnifiedMachine> = self.i2c.borrow_mut();
+        i2c_mut
+            .write(self.addr, &[reg_bytes[0], reg_bytes[1]])
+            .unwrap();
+
+        match i2c_mut.read(self.addr, &mut buffer) {
+            Ok(()) => Ok(buffer),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn read(&self) -> Result<u16, i2c::Error> {
+        let data: [u8; READ_BUFFER_SIZE] = self.read_17_bytes(0x0089)?;
+        let _range_status: u8 = data[0];
+        let _report_status: u8 = data[1];
+        let _stream_count: u8 = data[2];
+        let _dss_actual_effective_spads_sd0: u16 = u16::from_le_bytes([data[3], data[4]]);
+        let _ambient_count_rate_mcps_sd0: u16 = u16::from_le_bytes([data[7], data[8]]);
+
+        let _sigma_sd0: u16 = u16::from_le_bytes([data[9], data[10]]);
+        let _phase_sd0: u16 = u16::from_le_bytes([data[11], data[12]]);
+        let final_crosstalk_corrected_range_mm_sd0: u16 = u16::from_le_bytes([data[13], data[14]]);
+        let _peak_signal_count_rate_crosstalk_corrected_mcps_sd0: u16 =
+            u16::from_le_bytes([data[15], data[16]]);
+        //status = None
+        //if range_status in (17, 2, 1, 3):
+        //status = "HardwareFail"
+        //elif range_status == 13:
+        //status = "MinRangeFail"
+        //elif range_status == 18:
+        //status = "SynchronizationInt"
+        //elif range_status == 5:
+        //status = "OutOfBoundsFail"
+        //elif range_status == 4:
+        //status = "SignalFail"
+        //elif range_status == 6:
+        //status = "SignalFail"
+        //elif range_status == 7:
+        //status = "WrapTargetFail"
+        //elif range_status == 12:
+        //status = "XtalkSignalFail"
+        //elif range_status == 8:
+        //status = "RangeValidMinRangeClipped"
+        //elif range_status == 9:
+        //if stream_count == 0:
+        //status = "RangeValidNoWrapCheckFail"
+        //else:
+        //status = "OK"
+
+        Ok(final_crosstalk_corrected_range_mm_sd0)
+    }
 }
 
 impl<'a> ByteReader for PiicoDevVL53L1X<'a> {}

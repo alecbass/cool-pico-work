@@ -18,7 +18,7 @@ pub trait ByteReader {
         let mut buffer: [u8; 2] = [0; 2];
 
         let reg_bytes: [u8; 2] = reg.to_le_bytes();
-        i2c.write(addr, &[reg_bytes[0], reg_bytes[2]]).unwrap();
+        i2c.write(addr, &[reg_bytes[0], reg_bytes[1]]).unwrap();
 
         match i2c.read(addr, &mut buffer) {
             Ok(()) => Ok(u16::from_le_bytes([buffer[0], buffer[1]])),
