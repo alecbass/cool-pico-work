@@ -11,6 +11,7 @@ ADD memory.x /app/memory.x
 ADD openocd.gdb /app/openocd.gdb
 ADD build.rs /app/build.rs
 ADD build.sh /app/build.sh
+ADD udev /app/udev
 
 FROM setup as hardware
 
