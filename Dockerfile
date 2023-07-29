@@ -11,7 +11,6 @@ ADD memory.x /app/memory.x
 ADD openocd.gdb /app/openocd.gdb
 ADD build.rs /app/build.rs
 ADD build.sh /app/build.sh
-ADD openocd-config /app/openocd-config
 
 FROM setup as hardware
 
