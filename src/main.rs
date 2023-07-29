@@ -30,11 +30,13 @@ use rp_pico::hal::{
 };
 
 use core::cell::{self, RefCell};
+use defmt::info;
 use fugit::RateExtU32;
 use piicodev_bme280::{piicodev_bme280::PiicoDevBME280, reading::Reading};
 use piicodev_buzzer::notes::{note_to_frequency, Note, EIGHT_MELODIES, HARMONY};
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_unified::{HardwareArgs, I2CUnifiedMachine, GPIO89I2C};
+use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
 
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
@@ -43,8 +45,8 @@ fn main() -> ! {
     let mut peripherals: pac::Peripherals = pac::Peripherals::take().unwrap();
 
     let core: pac::CorePeripherals = pac::CorePeripherals::take().unwrap();
-    let mut watchdog = Watchdog::new(peripherals.WATCHDOG);
-    let sio = Sio::new(peripherals.SIO);
+    let mut watchdog: Watchdog = Watchdog::new(peripherals.WATCHDOG);
+    let sio: Sio = Sio::new(peripherals.SIO);
 
     // External high-speed crystal on the pico board is 12Mhz
     let external_xtal_freq_hz = 12_000_000u32;
@@ -99,8 +101,6 @@ fn main() -> ! {
     // Buzzer
     //
 
-    let mut buzzer = PiicoDevBuzzer::new(&i2c_machine_shared, Some(BuzzerVolume::High));
-
     //
     // Atmospheric Sensor
     //
@@ -108,6 +108,8 @@ fn main() -> ! {
     const DO_BUZZER: bool = false;
 
     if DO_BUZZER {
+        let mut buzzer: PiicoDevBuzzer =
+            PiicoDevBuzzer::new(&i2c_machine_shared, Some(BuzzerVolume::High));
         let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&i2c_machine_shared);
 
         loop {
@@ -134,7 +136,15 @@ fn main() -> ! {
         }
     }
 
-    loop {}
+    const DO_DISTANCE: bool = true;
+
+    let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
+
+    loop {
+        let distance_reading: u16 = distance_sensor.read().unwrap();
+
+        info!("Reading {}", distance_reading);
+    }
 }
 
 // End of file
