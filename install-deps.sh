@@ -16,5 +16,5 @@ cd openocd && ./bootstrap && ./configure --enable-cmsis-dap-v2 && make -j"$(npro
 cd openocd && $RUN_OPENOCD &
 
 # Install debug dependencies
-apt install gdb-multiarch libudev-dev gcc-arm-none-eabi
+apt install -y gdb-multiarch libudev-dev gcc-arm-none-eabi
 cargo install elf2uf2-rs
