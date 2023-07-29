@@ -4,3 +4,4 @@ build.sh
 .vscode
 !.vscode/launch.json
 !.vscode/tasks.json
+*.uf2

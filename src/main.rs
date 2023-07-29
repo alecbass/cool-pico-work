@@ -31,6 +31,7 @@ use rp_pico::hal::{
 
 use core::cell::{self, RefCell};
 use defmt::info;
+use embedded_hal::digital::v2::OutputPin;
 use fugit::RateExtU32;
 use piicodev_bme280::{piicodev_bme280::PiicoDevBME280, reading::Reading};
 use piicodev_buzzer::notes::{note_to_frequency, Note, EIGHT_MELODIES, HARMONY};
@@ -62,7 +63,7 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     let pins = rp_pico::Pins::new(
         peripherals.IO_BANK0,
@@ -88,14 +89,14 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
-    let i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay));
+    // let i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay));
 
     // let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
     // oled.arc(60, 60, 6, 60, 90);
     // oled.show().unwrap();
 
-    let i2c_machine_shared: RefCell<I2CUnifiedMachine> = RefCell::new(i2c_machine);
+    // let i2c_machine_shared: RefCell<I2CUnifiedMachine> = RefCell::new(i2c_machine);
 
     //
     // Buzzer
@@ -107,43 +108,53 @@ fn main() -> ! {
 
     const DO_BUZZER: bool = false;
 
-    if DO_BUZZER {
-        let mut buzzer: PiicoDevBuzzer =
-            PiicoDevBuzzer::new(&i2c_machine_shared, Some(BuzzerVolume::High));
-        let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&i2c_machine_shared);
+    // if DO_BUZZER {
+    //     let mut buzzer: PiicoDevBuzzer =
+    //         PiicoDevBuzzer::new(&i2c_machine_shared, Some(BuzzerVolume::High));
+    //     let mut sensor: PiicoDevBME280 = PiicoDevBME280::new(&i2c_machine_shared);
 
-        loop {
-            let reading = sensor.values();
-            let (temperature, pressure, humidity) = reading;
+    //     loop {
+    //         let reading = sensor.values();
+    //         let (temperature, pressure, humidity) = reading;
 
-            let pressure: f32 = pressure / 100.0; // convert air pressure from pascals to hPa
+    //         let pressure: f32 = pressure / 100.0; // convert air pressure from pascals to hPa
 
-            let altitude: f32 = sensor.altitude(None);
+    //         let altitude: f32 = sensor.altitude(None);
 
-            let reading: Reading = Reading {
-                temperature,
-                pressure,
-                humidity,
-                altitude,
-            };
+    //         let reading: Reading = Reading {
+    //             temperature,
+    //             pressure,
+    //             humidity,
+    //             altitude,
+    //         };
 
-            reading.report();
+    //         reading.report();
 
-            if reading.temperature > 25.0 {
-                buzzer.play_song(&[(Note::A4, 1000), (Note::A5, 1000), (Note::A6, 1000)]);
-                // buzzer.play_song(&HARMONY);
-            }
-        }
-    }
+    //         if reading.temperature > 25.0 {
+    //             buzzer.play_song(&[(Note::A4, 1000), (Note::A5, 1000), (Note::A6, 1000)]);
+    //             // buzzer.play_song(&HARMONY);
+    //         }
+    //     }
+    // }
 
-    const DO_DISTANCE: bool = true;
+    const DO_DISTANCE: bool = false;
 
-    let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
+    // let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
 
+    // if DO_DISTANCE {
+    //     loop {
+    //         let distance_reading: u16 = distance_sensor.read().unwrap();
+
+    //         info!("Reading {}", distance_reading);
+    //     }
+    // }
+
+    let mut led = pins.led.into_push_pull_output();
     loop {
-        let distance_reading: u16 = distance_sensor.read().unwrap();
-
-        info!("Reading {}", distance_reading);
+        led.set_high().unwrap();
+        delay.delay_ms(100);
+        led.set_low().unwrap();
+        delay.delay_ms(100);
     }
 }
 

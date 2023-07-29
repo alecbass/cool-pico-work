@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-RUN_OPENOCD='openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg -s tcl'
+RUN_OPENOCD="src/openocd -f interface/cmsis-dap.cfg -c 'adapter speed 5000' -f target/rp2040.cfg -s tcl"
 
 # Install the OpenOCD project
 if [[ ! -d openocd ]]; then
-    git clone https://github.com/openocd-org/openocd.git
+    git clone --branch rp2040-v0.12.0 https://github.com/raspberrypi/openocd.git
 fi
 
 # Build OpenOCD and its dependencies
@@ -16,7 +16,7 @@ cd openocd && ./bootstrap && ./configure --enable-cmsis-dap-v2 && make -j"$(npro
 cd openocd && $RUN_OPENOCD &
 
 # Install debug dependencies
-apt install -y gdb-multiarch libudev-dev gcc-arm-none-eabi usbutils
+apt install -y gdb-multiarch libudev-dev gcc-arm-none-eabi usbutils udev minicom
 cargo install elf2uf2-rs
 
 # Copy udev configuration for OpenOCD
