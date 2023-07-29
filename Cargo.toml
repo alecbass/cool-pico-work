@@ -13,7 +13,7 @@ defmt-rtt = "0.4"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 
 # We're using a Pico by default on this template
-rp-pico = "0.6"
+rp-pico = "0.7"
 
 # For unit conversions
 fugit = "0.3.6"
