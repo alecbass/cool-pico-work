@@ -89,14 +89,13 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
-    // let i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay));
+    let i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay));
+    let i2c_machine_shared: RefCell<I2CUnifiedMachine> = RefCell::new(i2c_machine);
 
     // let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
 
     // oled.arc(60, 60, 6, 60, 90);
     // oled.show().unwrap();
-
-    // let i2c_machine_shared: RefCell<I2CUnifiedMachine> = RefCell::new(i2c_machine);
 
     //
     // Buzzer
@@ -137,24 +136,23 @@ fn main() -> ! {
     //     }
     // }
 
-    const DO_DISTANCE: bool = false;
+    const DO_DISTANCE: bool = true;
 
-    // let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
+    let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
 
-    // if DO_DISTANCE {
-    //     loop {
-    //         let distance_reading: u16 = distance_sensor.read().unwrap();
+    if DO_DISTANCE {
+        loop {
+            let distance_reading: u16 = distance_sensor.read().unwrap();
 
-    //         info!("Reading {}", distance_reading);
-    //     }
-    // }
+            info!("Reading {}", distance_reading);
+        }
+    }
 
-    let mut led = pins.led.into_push_pull_output();
+    let mut count: u8 = 0;
     loop {
-        led.set_high().unwrap();
-        delay.delay_ms(100);
-        led.set_low().unwrap();
-        delay.delay_ms(100);
+        count += 1;
+
+        info!("lol");
     }
 }
 
