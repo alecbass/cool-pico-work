@@ -7,7 +7,7 @@ use defmt::info;
 use rp_pico::hal::i2c;
 
 const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
-    0x2D, // Register
+    // 0x00, // Register
     // 0x00, // Register padding
     0x00, // 0x2d : set bit 2 and 5 to 1 for fast plus mode (1MHz I2C), else don't touch */
     0x00, // 0x2e : bit 0 if I2C pulled up at 1.8V, else set bit 0 to 1 (pull up at AVDD) */
@@ -221,43 +221,45 @@ impl<'a> PiicoDevVL53L1X<'a> {
         // NOTE: The Python library has a check for compat_ind >= 1 here. I don't know what it does
 
         let sensor: Self = Self { addr, i2c };
-        i2c_mut.delay(200);
         sensor.reset(&mut i2c_mut).unwrap();
 
-        // let model_id = sensor.read_model_id();
-        // info!("NOOOO {:?}", model_id.unwrap_or_default());
-        // if model_id.unwrap() != 0xEACC {}
+        i2c_mut.delay(1);
+        let model_id: u16 = sensor.read_model_id(&mut i2c_mut).unwrap_or(0xEACC);
+        info!("hehehe {}", model_id);
+        if model_id != 0xEACC {
+            info!("NOOOO {:?}", model_id);
+            panic!("model ID is invalid");
+        }
 
         // Write default configuration
         // Python: self.i2c.writeto_mem(self.addr, 0x2D, VL51L1X_DEFAULT_CONFIGURATION, addrsize=16)
-        // i2c_mut.write(addr, &[0x2D]).unwrap();
-
-        // for byte in VL51L1X_DEFAULT_CONFIGURATION {
-        //     i2c_mut.write(addr, &[*byte]).unwrap();
-        // }
+        i2c_mut.write(addr, &[0x2D, 0x00]).unwrap();
         i2c_mut.write(addr, VL51L1X_DEFAULT_CONFIGURATION).unwrap();
         i2c_mut.delay(100);
+
         // The API triggers this change in VL53L1_init_and_start_range() once a
         // measurement is started; assumes MM1 and MM2 are disabled
-
-        let mut b: [u8; 16] = [0; 16];
         i2c_mut.write(addr, &[0x0022]).unwrap();
-        i2c_mut.read(addr, &mut b).unwrap();
-        let value_to_write: u16 = 1; // Self::read_16(addr, 0x0022, &mut i2c_mut).unwrap() * 4;
-        let thing = [&value_to_write];
-        info!("value {} {:?}", value_to_write, thing);
-        Self::write_reg_16_bit(addr, 0x001E, value_to_write, &mut i2c_mut).unwrap();
+        Self::write_reg_16_bit(
+            addr,
+            0x001E,
+            Self::read_16(addr, 0x0022, &mut i2c_mut).unwrap() * 4,
+            &mut i2c_mut,
+        )
+        .unwrap();
         i2c_mut.delay(200);
 
         sensor
     }
 
-    fn read_model_id(&self) -> Result<u16, i2c::Error> {
-        Self::read_16(self.addr, 0x010F, &mut self.i2c.borrow_mut())
+    fn read_model_id(&self, i2c_mut: &mut RefMut<I2CUnifiedMachine>) -> Result<u16, i2c::Error> {
+        Self::read_16(self.addr, 0x010F, i2c_mut)
     }
 
     fn reset(&self, i2c_mut: &mut RefMut<I2CUnifiedMachine>) -> Result<(), i2c::Error> {
-        Self::write_reg_8_bit(self.addr, 0x0000, 0x00, i2c_mut)
+        Self::write_reg_8_bit(self.addr, 0x0000, 0x00, i2c_mut)?;
+        i2c_mut.delay(100);
+        Self::write_reg_8_bit(self.addr, 0x0000, 0x01, i2c_mut)
     }
 
     fn read_17_bytes(&self, reg: u16) -> Result<[u8; READ_BUFFER_SIZE], i2c::Error> {
