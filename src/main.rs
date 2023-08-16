@@ -30,6 +30,7 @@ use rp_pico::hal::{
     I2C,
 };
 
+use core::borrow::BorrowMut;
 use core::cell::{self, RefCell};
 use core::fmt::Write;
 use defmt::{debug, info, println};
@@ -80,7 +81,7 @@ fn main() -> ! {
         pins.gpio1.into_mode::<gpio::FunctionUart>(),
     );
 
-    let mut uart = UartPeripheral::new(peripherals.UART0, uart_pins, &mut peripherals.RESETS)
+    let uart = UartPeripheral::new(peripherals.UART0, uart_pins, &mut peripherals.RESETS)
         .enable(
             // UartConfig::new(9600.Hz(), DataBits::Eight, None, StopBits::One),
             UartConfig::default(),
@@ -105,7 +106,7 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
-    let i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay));
+    let i2c_machine: I2CUnifiedMachine = I2CUnifiedMachine::new((i2c, delay, uart));
     let i2c_machine_shared: RefCell<I2CUnifiedMachine> = RefCell::new(i2c_machine);
 
     // let mut oled = PiicoDevSSD1306::new((i2c0, i2c1, delay, pins, resets));
@@ -152,15 +153,17 @@ fn main() -> ! {
     //     }
     // }
 
-    const DO_DISTANCE: bool = false;
+    const DO_DISTANCE: bool = true;
 
     if DO_DISTANCE {
-        // let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
-        // loop {
-        //     let distance_reading: u16 = distance_sensor.read().unwrap();
+        let distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
 
-        //     info!("Reading {}", distance_reading);
-        // }
+        let mut comms = i2c_machine_shared.borrow_mut();
+        loop {
+            let distance_reading: u16 = distance_sensor.read(&mut comms).unwrap();
+            comms.delay(100);
+            writeln!(comms.uart, "Distance: {}cm", distance_reading).unwrap();
+        }
     }
 
     let mut count: u8 = 0;
@@ -168,7 +171,7 @@ fn main() -> ! {
     loop {
         count += 1;
 
-        writeln!(uart, "FINALLY GOT SERIAL COMMUNICATIONS {}", count).unwrap();
+        writeln!(i.uart, "FINALLY GOT SERIAL COMMUNICATIONS {}", count).unwrap();
         i.delay(1000);
     }
 }

@@ -15,6 +15,8 @@ use rp_pico::{
         },
         i2c, pac,
         sio::Sio,
+        uart,
+        uart::UartPeripheral,
         watchdog::Watchdog,
         I2C,
     },
@@ -45,17 +47,28 @@ pub type GPIO89I2C = I2C<
     ),
 >;
 
+type Uart = uart::UartPeripheral<
+    uart::Enabled,
+    pac::UART0,
+    (
+        Pin<gpio::bank0::Gpio0, Function<gpio::Uart>>,
+        Pin<gpio::bank0::Gpio1, Function<gpio::Uart>>,
+    ),
+>;
+
 pub struct I2CUnifiedMachine {
     i2c: GPIO89I2C,
     delay: Delay,
+    // TODO: Abstract this
+    pub uart: Uart,
 }
 
 // Hardware arguments whose types I don't really know about yet
-pub type HardwareArgs<'a> = (GPIO89I2C, Delay);
+pub type HardwareArgs<'a> = (GPIO89I2C, Delay, Uart);
 
 impl I2CUnifiedMachine {
-    pub fn new((i2c, mut delay): HardwareArgs) -> Self {
-        Self { i2c, delay }
+    pub fn new((i2c, delay, uart): HardwareArgs) -> Self {
+        Self { i2c, delay, uart }
     }
 
     pub fn delay(&mut self, ms: u32) {
