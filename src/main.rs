@@ -25,12 +25,14 @@ use rp_pico::hal::{
     clocks::{init_clocks_and_plls, Clock},
     gpio, pac,
     sio::Sio,
+    uart::{UartConfig, UartPeripheral},
     watchdog::Watchdog,
     I2C,
 };
 
 use core::cell::{self, RefCell};
-use defmt::info;
+use core::fmt::Write;
+use defmt::{debug, info, println};
 use embedded_hal::digital::v2::OutputPin;
 use fugit::RateExtU32;
 use piicodev_bme280::{piicodev_bme280::PiicoDevBME280, reading::Reading};
@@ -43,7 +45,8 @@ const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
 
 #[entry]
 fn main() -> ! {
-    let mut peripherals: pac::Peripherals = pac::Peripherals::take().unwrap();
+    let mut peripherals: pac::Peripherals =
+        pac::Peripherals::take().expect("Cannot take peripherals");
 
     let core: pac::CorePeripherals = pac::CorePeripherals::take().unwrap();
     let mut watchdog: Watchdog = Watchdog::new(peripherals.WATCHDOG);
@@ -72,13 +75,26 @@ fn main() -> ! {
         &mut peripherals.RESETS,
     );
 
+    let uart_pins = (
+        pins.gpio0.into_mode::<gpio::FunctionUart>(),
+        pins.gpio1.into_mode::<gpio::FunctionUart>(),
+    );
+
+    let mut uart = UartPeripheral::new(peripherals.UART0, uart_pins, &mut peripherals.RESETS)
+        .enable(
+            // UartConfig::new(9600.Hz(), DataBits::Eight, None, StopBits::One),
+            UartConfig::default(),
+            clocks.peripheral_clock.freq(),
+        )
+        .unwrap();
+
     let i2c0 = peripherals.I2C0;
     let mut resets = peripherals.RESETS;
 
     // let hardware_args: HardwareArgs = (i2c0, delay, &pins, resets);
 
-    let gpio8 = pins.gpio8.into_mode();
-    let gpio9 = pins.gpio9.into_mode();
+    let gpio8 = pins.gpio8.into_mode::<gpio::FunctionI2C>();
+    let gpio9 = pins.gpio9.into_mode::<gpio::FunctionI2C>();
 
     let i2c: GPIO89I2C = I2C::i2c0(
         i2c0,
@@ -136,23 +152,24 @@ fn main() -> ! {
     //     }
     // }
 
-    const DO_DISTANCE: bool = true;
-
-    let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
+    const DO_DISTANCE: bool = false;
 
     if DO_DISTANCE {
-        loop {
-            let distance_reading: u16 = distance_sensor.read().unwrap();
+        // let mut distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
+        // loop {
+        //     let distance_reading: u16 = distance_sensor.read().unwrap();
 
-            info!("Reading {}", distance_reading);
-        }
+        //     info!("Reading {}", distance_reading);
+        // }
     }
 
     let mut count: u8 = 0;
+    let mut i = i2c_machine_shared.borrow_mut();
     loop {
         count += 1;
 
-        info!("lol");
+        writeln!(uart, "FINALLY GOT SERIAL COMMUNICATIONS {}", count).unwrap();
+        i.delay(1000);
     }
 }
 

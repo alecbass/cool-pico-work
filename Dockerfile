@@ -3,6 +3,7 @@ FROM rust:latest as setup
 ARG USERNAME=pico
 ARG GROUPID=1000
 ARG USERID=1000
+ENV HOME=/app
 
 RUN useradd --uid ${USERID} ${USERNAME}
 
@@ -26,6 +27,8 @@ FROM setup as hardware
 RUN rustup target add thumbv6m-none-eabi
 RUN cargo install flip-link
 RUN cargo build
+
+RUN mkdir /home/pico
 
 ADD ./setup-pico.sh /app/setup-pico.sh
 RUN ./setup-pico.sh

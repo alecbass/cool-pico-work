@@ -132,6 +132,8 @@ else
         OPENOCD_CONFIGURE_ARGS="$OPENOCD_CONFIGURE_ARGS --enable-picoprobe"
     fi
 
+    # Picoprobe doesn't require the other arguments
+    OPENOCD_CONFIGURE_ARGS=""
     git clone "${GITHUB_PREFIX}openocd${GITHUB_SUFFIX}" -b $OPENOCD_BRANCH --depth=1
     cd openocd
     ./bootstrap
