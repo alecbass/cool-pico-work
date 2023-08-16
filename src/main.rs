@@ -154,43 +154,53 @@ fn main() -> ! {
     // }
 
     const DO_DISTANCE: bool = true;
+    const DELAY: u16 = 40;
 
     if DO_DISTANCE {
         let mut comms = i2c_machine_shared.borrow_mut();
         let distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &mut comms);
-        let mut led = PiicoDevRGB::new(&mut comms);
+        let mut led: PiicoDevRGB = PiicoDevRGB::new(&mut comms);
+        let mut buzzer: PiicoDevBuzzer = PiicoDevBuzzer::new(&mut comms, Some(BuzzerVolume::Low));
         led.set_brightness(16, &mut comms).unwrap();
 
         loop {
             let distance_reading_mm: u16 = distance_sensor.read(&mut comms).unwrap();
-            comms.delay(40);
-            writeln!(comms.uart, "Distance: {}mm", distance_reading_mm).unwrap();
+            comms.delay(DELAY as u32);
+            if writeln!(comms.uart, "Distance: {}mm", distance_reading_mm).is_err() {
+                // Wiring probably isn't set up correctly
+            }
 
+            let mut note: Note = Note::A3;
             // Green light
             if distance_reading_mm < 190 {
-                led.set_pixel(0, (0, 255, 0))
+                led.set_pixel(0, (0, 255, 0));
+                note = Note::A4;
             } else {
-                led.set_pixel(0, (0, 0, 0))
+                led.set_pixel(0, (0, 0, 0));
             }
 
             // Yellow light
             if distance_reading_mm < 120 {
-                led.set_pixel(1, (255, 255, 0))
+                led.set_pixel(1, (255, 255, 0));
+                note = Note::A5;
             } else {
                 led.set_pixel(1, (0, 0, 0))
             }
 
             // Red light
             if distance_reading_mm < 60 {
-                led.set_pixel(2, (255, 0, 0))
+                led.set_pixel(2, (255, 0, 0));
+                note = Note::A6;
             } else {
-                led.set_pixel(2, (0, 0, 0))
+                led.set_pixel(2, (0, 0, 0));
             }
 
             if distance_reading_mm >= 190 {
                 led.clear(&mut comms).unwrap();
             } else {
                 led.show(&mut comms).unwrap();
+                // Note is guaranteed to not be null in this flow
+                buzzer.tone(&note, DELAY, &mut comms).unwrap();
             }
         }
     }
