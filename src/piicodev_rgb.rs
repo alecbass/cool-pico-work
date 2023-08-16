@@ -1,4 +1,4 @@
-use crate::piicodev_unified::{HardwareArgs, I2CBase, I2CUnifiedMachine};
+use crate::piicodev_unified::{I2CBase, I2CUnifiedMachine};
 use rp_pico::hal::i2c;
 
 const BASE_ADDR: u8 = 0x1E; // 0x08;
@@ -40,23 +40,21 @@ fn wheel(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
 // Colour properties. Not sure what they stand for
 pub type PQV = (u8, u8, u8);
 
-pub struct PiicoDevRGB<'a> {
+pub struct PiicoDevRGB {
     addr: u8,
-    pub i2c: &'a mut I2CUnifiedMachine,
     led: [PQV; 3],
     bright: u8,
 }
 
-impl<'a> PiicoDevRGB<'a> {
-    pub fn new(i2c: &'a mut I2CUnifiedMachine) -> Self {
+impl PiicoDevRGB {
+    pub fn new(comms: &mut I2CUnifiedMachine) -> Self {
         let mut rgb = Self {
             addr: BASE_ADDR,
-            i2c,
             led: [(0, 0, 0), (0, 0, 0), (0, 0, 0)],
             bright: 40,
         };
-        rgb.set_brightness(rgb.bright).unwrap();
-        rgb.show().unwrap();
+        rgb.set_brightness(rgb.bright, comms).unwrap();
+        rgb.show(comms).unwrap();
         rgb
     }
 
@@ -64,13 +62,17 @@ impl<'a> PiicoDevRGB<'a> {
         self.led[n] = c;
     }
 
-    pub fn set_i2c_addr(&mut self, new_addr: u8) -> Result<(), i2c::Error> {
-        let result = self.i2c.write(self.addr, &[REG_I2C_ADDR, new_addr]);
+    pub fn set_i2c_addr(
+        &mut self,
+        new_addr: u8,
+        comms: &mut I2CUnifiedMachine,
+    ) -> Result<(), i2c::Error> {
+        let result = comms.write(self.addr, &[REG_I2C_ADDR, new_addr]);
         self.addr = new_addr;
         result
     }
 
-    pub fn show(&mut self) -> Result<(), i2c::Error> {
+    pub fn show(&mut self, comms: &mut I2CUnifiedMachine) -> Result<(), i2c::Error> {
         let buffer: [u8; 10] = [
             REG_LED_VALS,
             self.led[0].0,
@@ -84,37 +86,45 @@ impl<'a> PiicoDevRGB<'a> {
             self.led[2].2,
         ];
 
-        self.i2c.write(self.addr, &buffer)
+        comms.write(self.addr, &buffer)
     }
 
-    pub fn clear(&mut self) -> Result<(), i2c::Error> {
-        let result = self.i2c.write(self.addr, &[REG_CLEAR, 0x01]);
+    pub fn clear(&mut self, comms: &mut I2CUnifiedMachine) -> Result<(), i2c::Error> {
+        let result = comms.write(self.addr, &[REG_CLEAR, 0x01]);
         self.led = [(0, 0, 0), (0, 0, 0), (0, 0, 0)];
         result
     }
 
-    pub fn fill(&mut self, c: u8) -> Result<(), i2c::Error> {
+    pub fn fill(&mut self, c: u8, comms: &mut I2CUnifiedMachine) -> Result<(), i2c::Error> {
         for i in 0..self.led.len() {
             self.led[i] = (c, c, c);
         }
-        self.show()
+        self.show(comms)
     }
 
-    pub fn set_brightness(&mut self, x: u8) -> Result<(), i2c::Error> {
+    pub fn set_brightness(
+        &mut self,
+        x: u8,
+        comms: &mut I2CUnifiedMachine,
+    ) -> Result<(), i2c::Error> {
         self.bright = x;
-        let result = self.i2c.write(self.addr, &[REG_BRIGHT, self.bright]);
-        self.i2c.delay(1);
+        let result = comms.write(self.addr, &[REG_BRIGHT, self.bright]);
+        comms.delay(1);
 
         result
     }
 
-    pub fn power_led(&mut self, state: bool) -> Result<(), i2c::Error> {
+    pub fn power_led(
+        &mut self,
+        state: bool,
+        comms: &mut I2CUnifiedMachine,
+    ) -> Result<(), i2c::Error> {
         let state_value: u8 = match state {
             true => 1,
             false => 0,
         };
-        let result = self.i2c.write(self.addr, &[REG_CTRL, state_value]);
-        self.i2c.delay(1);
+        let result = comms.write(self.addr, &[REG_CTRL, state_value]);
+        comms.delay(1);
 
         result
     }

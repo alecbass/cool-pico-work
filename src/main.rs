@@ -30,7 +30,7 @@ use rp_pico::hal::{
     I2C,
 };
 
-use core::borrow::BorrowMut;
+use crate::piicodev_rgb::PiicoDevRGB;
 use core::cell::{self, RefCell};
 use core::fmt::Write;
 use defmt::{debug, info, println};
@@ -156,13 +156,42 @@ fn main() -> ! {
     const DO_DISTANCE: bool = true;
 
     if DO_DISTANCE {
-        let distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &i2c_machine_shared);
-
         let mut comms = i2c_machine_shared.borrow_mut();
+        let distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &mut comms);
+        let mut led = PiicoDevRGB::new(&mut comms);
+        led.set_brightness(16, &mut comms).unwrap();
+
         loop {
-            let distance_reading: u16 = distance_sensor.read(&mut comms).unwrap();
-            comms.delay(100);
-            writeln!(comms.uart, "Distance: {}cm", distance_reading).unwrap();
+            let distance_reading_mm: u16 = distance_sensor.read(&mut comms).unwrap();
+            comms.delay(40);
+            writeln!(comms.uart, "Distance: {}mm", distance_reading_mm).unwrap();
+
+            // Green light
+            if distance_reading_mm < 190 {
+                led.set_pixel(0, (0, 255, 0))
+            } else {
+                led.set_pixel(0, (0, 0, 0))
+            }
+
+            // Yellow light
+            if distance_reading_mm < 120 {
+                led.set_pixel(1, (255, 255, 0))
+            } else {
+                led.set_pixel(1, (0, 0, 0))
+            }
+
+            // Red light
+            if distance_reading_mm < 60 {
+                led.set_pixel(2, (255, 0, 0))
+            } else {
+                led.set_pixel(2, (0, 0, 0))
+            }
+
+            if distance_reading_mm >= 190 {
+                led.clear(&mut comms).unwrap();
+            } else {
+                led.show(&mut comms).unwrap();
+            }
         }
     }
 

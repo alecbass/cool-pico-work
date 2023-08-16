@@ -2,11 +2,7 @@ use crate::{
     byte_reader::ByteReader,
     piicodev_unified::{I2CBase, I2CUnifiedMachine},
 };
-use core::{
-    cell::{RefCell, RefMut},
-    fmt::Write,
-};
-use defmt::{debug, info};
+use core::fmt::Write;
 use rp_pico::hal::i2c;
 
 const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
@@ -211,28 +207,26 @@ const BASE_ADDR: u8 = 0x29;
 // Used for the read() method
 const READ_BUFFER_SIZE: usize = 17;
 
-pub struct PiicoDevVL53L1X<'a> {
+pub struct PiicoDevVL53L1X {
     pub addr: u8,
-    i2c: &'a RefCell<I2CUnifiedMachine>,
 }
 
-impl<'a> PiicoDevVL53L1X<'a> {
-    pub fn new(addr: Option<u8>, i2c: &'a RefCell<I2CUnifiedMachine>) -> Self {
+impl PiicoDevVL53L1X {
+    pub fn new(addr: Option<u8>, comms: &mut I2CUnifiedMachine) -> Self {
         let addr: u8 = addr.unwrap_or(BASE_ADDR);
-        let mut i2c_mut: RefMut<I2CUnifiedMachine> = i2c.borrow_mut();
 
         // NOTE: The Python library has a check for compat_ind >= 1 here. I don't know what it does
 
-        let sensor: Self = Self { addr, i2c };
+        let sensor: Self = Self { addr };
 
-        let s = sensor.reset(&mut i2c_mut);
+        let s = sensor.reset(comms);
         if s.is_err() {
             panic!("non")
         }
 
-        i2c_mut.delay(1);
-        let model_id: u16 = sensor.read_model_id(&mut i2c_mut).unwrap_or(0xEACC);
-        writeln!(i2c_mut.uart, "Model ID: {}", model_id).unwrap();
+        comms.delay(1);
+        let model_id: u16 = sensor.read_model_id(comms).unwrap_or(0xEACC);
+        writeln!(comms.uart, "Model ID: {}", model_id).unwrap();
 
         // Write default configuration
         // Python: self.i2c.writeto_mem(self.addr, 0x2D, VL51L1X_DEFAULT_CONFIGURATION, addrsize=16)
@@ -246,25 +240,25 @@ impl<'a> PiicoDevVL53L1X<'a> {
         // }
         // i2c_mut.write(addr, &config_bytes).unwrap();
 
-        i2c_mut.write(addr, VL51L1X_DEFAULT_CONFIGURATION).unwrap();
-        i2c_mut.delay(100);
+        comms.write(addr, VL51L1X_DEFAULT_CONFIGURATION).unwrap();
+        comms.delay(100);
 
         // The API triggers this change in VL53L1_init_and_start_range() once a
         // measurement is started; assumes MM1 and MM2 are disabled
-        i2c_mut.write(addr, &[0x0022]).unwrap();
+        comms.write(addr, &[0x0022]).unwrap();
         Self::write_reg_16_bit(
             addr,
             0x001E,
-            Self::read_16(addr, 0x0022, &mut i2c_mut).unwrap() * 4,
-            &mut i2c_mut,
+            Self::read_16(addr, 0x0022, comms).unwrap() * 4,
+            comms,
         )
         .unwrap();
-        i2c_mut.delay(200);
+        comms.delay(200);
 
         sensor
     }
 
-    fn read_model_id(&self, i2c_mut: &mut RefMut<I2CUnifiedMachine>) -> Result<u16, i2c::Error> {
+    fn read_model_id(&self, i2c_mut: &mut I2CUnifiedMachine) -> Result<u16, i2c::Error> {
         i2c_mut.write(self.addr, &[0x01, 0x0F])?;
 
         let mut buffer: [u8; 2] = [0; 2];
@@ -277,7 +271,7 @@ impl<'a> PiicoDevVL53L1X<'a> {
         // Self::read_16(self.addr, 0x010F, i2c_mut)
     }
 
-    fn reset(&self, i2c_mut: &mut RefMut<I2CUnifiedMachine>) -> Result<(), i2c::Error> {
+    fn reset(&self, i2c_mut: &mut I2CUnifiedMachine) -> Result<(), i2c::Error> {
         // Self::write_reg_8_bit(self.addr, 0x0000, 0x00, i2c_mut)?;
         i2c_mut.write(self.addr, &[0x00, 0x00, 0x00])?;
         i2c_mut.delay(100);
@@ -288,7 +282,7 @@ impl<'a> PiicoDevVL53L1X<'a> {
     fn read_17_bytes(
         &self,
         reg: u16,
-        comms: &mut RefMut<I2CUnifiedMachine>,
+        comms: &mut I2CUnifiedMachine,
     ) -> Result<[u8; READ_BUFFER_SIZE], i2c::Error> {
         let reg_bytes: [u8; 2] = reg.to_be_bytes();
 
@@ -303,7 +297,7 @@ impl<'a> PiicoDevVL53L1X<'a> {
         Ok(buffer)
     }
 
-    pub fn read(&self, comms: &mut RefMut<I2CUnifiedMachine>) -> Result<u16, i2c::Error> {
+    pub fn read(&self, comms: &mut I2CUnifiedMachine) -> Result<u16, i2c::Error> {
         let data: [u8; READ_BUFFER_SIZE] = self.read_17_bytes(0x0089, comms)?;
         let _range_status: u8 = data[0];
         let _report_status: u8 = data[1];
@@ -319,7 +313,7 @@ impl<'a> PiicoDevVL53L1X<'a> {
             u16::from_le_bytes([data[15], data[16]]);
 
         // Roughly accurate to mm
-        let distance_cm: u16 = final_crosstalk_corrected_range_mm_sd0 / 1000 / 2;
+        let distance_mm: u16 = final_crosstalk_corrected_range_mm_sd0 / 100 / 2;
         //status = None
         //if range_status in (17, 2, 1, 3):
         //status = "HardwareFail"
@@ -345,8 +339,8 @@ impl<'a> PiicoDevVL53L1X<'a> {
         //else:
         //status = "OK"
 
-        Ok(distance_cm)
+        Ok(distance_mm)
     }
 }
 
-impl<'a> ByteReader for PiicoDevVL53L1X<'a> {}
+impl ByteReader for PiicoDevVL53L1X {}

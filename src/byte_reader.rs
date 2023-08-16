@@ -1,9 +1,8 @@
 use crate::piicodev_unified::{I2CBase, I2CUnifiedMachine};
-use core::cell::RefMut;
 use rp_pico::hal::i2c;
 
 pub trait ByteReader {
-    fn read_8(addr: u8, reg: u8, i2c: &mut RefMut<I2CUnifiedMachine>) -> Result<u8, i2c::Error> {
+    fn read_8(addr: u8, reg: u8, i2c: &mut I2CUnifiedMachine) -> Result<u8, i2c::Error> {
         let mut buffer: [u8; 1] = [0; 1];
 
         i2c.write(addr, &[reg])?;
@@ -14,7 +13,7 @@ pub trait ByteReader {
         }
     }
 
-    fn read_16(addr: u8, reg: u16, i2c: &mut RefMut<I2CUnifiedMachine>) -> Result<u16, i2c::Error> {
+    fn read_16(addr: u8, reg: u16, i2c: &mut I2CUnifiedMachine) -> Result<u16, i2c::Error> {
         let reg_bytes: [u8; 2] = reg.to_le_bytes();
         i2c.write(addr, &[reg_bytes[0], reg_bytes[1]]).unwrap();
 
@@ -30,7 +29,7 @@ pub trait ByteReader {
         addr: u8,
         reg: u8,
         value: u8,
-        i2c: &mut RefMut<I2CUnifiedMachine>,
+        i2c: &mut I2CUnifiedMachine,
     ) -> Result<(), i2c::Error> {
         i2c.write(addr, &[reg, value])
     }
@@ -39,7 +38,7 @@ pub trait ByteReader {
         addr: u8,
         reg: u8,
         value: u16,
-        i2c: &mut RefMut<I2CUnifiedMachine>,
+        i2c: &mut I2CUnifiedMachine,
     ) -> Result<(), i2c::Error> {
         // Turn a 16-bit value into two bytes
         let value: [u8; 2] = value.to_le_bytes();
