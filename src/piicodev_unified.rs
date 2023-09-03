@@ -1,28 +1,8 @@
-use crate::utils::create_buffer;
 use cortex_m::{
     delay::Delay,
     prelude::{_embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write},
 };
-use embedded_hal::digital::v2::OutputPin;
-use fugit::RateExtU32;
-use rp_pico::{
-    hal::{
-        clocks::{init_clocks_and_plls, Clock, ClocksManager},
-        gpio::{
-            self,
-            bank0::{Gpio10, Gpio11, Gpio18, Gpio19, Gpio25, Gpio8, Gpio9},
-            Function, Output, Pin, PushPull, I2C as GPIOI2C,
-        },
-        i2c, pac,
-        sio::Sio,
-        uart,
-        uart::UartPeripheral,
-        watchdog::Watchdog,
-        I2C,
-    },
-    pac::I2C0,
-    Pins,
-};
+use rp_pico::hal::{gpio, i2c, pac, uart, I2C};
 
 const COMPAT_IND: u8 = 1;
 
@@ -42,19 +22,13 @@ pub trait I2CBase {
 pub type GPIO89I2C = I2C<
     pac::I2C0,
     (
-        gpio::Pin<gpio::bank0::Gpio8, gpio::Function<rp_pico::hal::gpio::I2C>>,
-        gpio::Pin<gpio::bank0::Gpio9, gpio::Function<rp_pico::hal::gpio::I2C>>,
+        gpio::Pin<gpio::bank0::Gpio8, gpio::FunctionI2C, gpio::PullUp>,
+        gpio::Pin<gpio::bank0::Gpio9, gpio::FunctionI2C, gpio::PullDown>,
     ),
 >;
 
-type Uart = uart::UartPeripheral<
-    uart::Enabled,
-    pac::UART0,
-    (
-        Pin<gpio::bank0::Gpio0, Function<gpio::Uart>>,
-        Pin<gpio::bank0::Gpio1, Function<gpio::Uart>>,
-    ),
->;
+type Uart =
+    uart::UartPeripheral<uart::Enabled, pac::UART0, (rp_pico::Gp0Uart0Tx, rp_pico::Gp1Uart0Rx)>;
 
 pub struct I2CUnifiedMachine {
     i2c: GPIO89I2C,
