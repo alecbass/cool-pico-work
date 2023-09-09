@@ -12,6 +12,7 @@ mod piicodev_rgb;
 mod piicodev_ssd1306;
 mod piicodev_unified;
 mod piicodev_vl53l1x;
+mod pins;
 mod time;
 mod utils;
 
@@ -36,6 +37,7 @@ use crate::piicodev_rgb::PiicoDevRGB;
 use core::cell::RefCell;
 use core::fmt::Write;
 use embassy_executor::{Executor, Spawner};
+use embedded_hal::digital::v2::OutputPin;
 use fugit::RateExtU32;
 use piicodev_buzzer::notes::Note;
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
@@ -51,14 +53,6 @@ async fn run_jingle_async(
     comms: RefCell<I2CUnifiedMachine>,
     state: &'static cyw43::State,
 ) -> ! {
-    // let pwr: Pin<Gpio23, _> = pins.b_power_save.into_mode();
-    // let pwr = Output::new(p.PIN_23, Level::Low);
-    // let cs = Output::new(p.PIN_25, Level::High);
-    // let mut pio = Pio::new(p.PIO0, Irqs);
-    // let spi = PioSpi::new(&mut pio.common, pio.sm0, pio.irq0, cs, p.PIN_24, p.PIN_29, p.DMA_CH0);
-
-    // let (_net_device, mut control, runner) = cyw43::new(&mut state, pins.vbus_detect.into(), spi, fw).await;
-
     const DELAY: u16 = 40;
     let mut comms = comms.borrow_mut();
     let distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &mut comms);
@@ -115,6 +109,15 @@ async fn run_jingle_async(
     }
 }
 
+#[embassy_executor::task]
+async fn wifi_blinky(
+    spawner: Spawner,
+    comms: RefCell<I2CUnifiedMachine>,
+    state: &'static cyw43::State,
+) -> ! {
+    loop {}
+}
+
 #[entry]
 fn main() -> ! {
     let mut peripherals: pac::Peripherals =
@@ -140,7 +143,7 @@ fn main() -> ! {
 
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
-    let pins = rp_pico::Pins::new(
+    let pins = crate::pins::pins::Pins::new(
         peripherals.IO_BANK0,
         peripherals.PADS_BANK0,
         sio.gpio_bank0,
@@ -161,7 +164,6 @@ fn main() -> ! {
         .unwrap();
 
     let mut resets = peripherals.RESETS;
-
     // let hardware_args: HardwareArgs = (i2c0, delay, &pins, resets);
 
     let gpio8: gpio::Pin<gpio::bank0::Gpio8, gpio::FunctionI2c, gpio::PullUp> = pins
@@ -193,13 +195,52 @@ fn main() -> ! {
     let state: cyw43::State = cyw43::State::new();
     let state: &'static mut cyw43::State = make_static!(state);
 
-    executor.run(|spawner: Spawner| {
-        // let spawn_token: SpawnToken<_> = task_pool.spawn(|| run(spawner, pins, state).into());
-        // spawner.spawn(spawn_token).unwrap();
-        spawner
-            .spawn(run_jingle_async(spawner, i2c_machine_shared, state))
-            .unwrap();
-    });
+    const DO_BLINKY: bool = true;
+    const DO_JINGLE: bool = false;
+
+    if DO_BLINKY {
+        // These are implicitly used by the spi driver if they are in the correct mode
+        let spi_cs: gpio::Pin<gpio::bank0::Gpio25, gpio::FunctionSpi, gpio::PullDown> =
+            pins.wl_cs.into_function();
+
+        // TODO should be high from the beginning :-(
+        spi_cs.into_push_pull_output().set_high().unwrap();
+        // spi_cs.into_push_pull_output().set_high().unwrap();
+
+        let mut spi_clk = pins.voltage_monitor_wl_clk.into_push_pull_output();
+        spi_clk.set_low().unwrap();
+
+        let spi_mosi_miso: gpio::Pin<gpio::bank0::Gpio24, gpio::FunctionSpi, gpio::PullDown> =
+            pins.wl_d.into_function();
+        spi_mosi_miso.into_push_pull_output().set_low().unwrap();
+
+        let mut comms = i2c_machine_shared.borrow_mut();
+        writeln!(comms.uart, "lolll").unwrap();
+
+        // let pwr: gpio::Pin<gpio::bank0::> = pins.b_power_save;
+        // let pwr = Output::new(p.PIN_23, Level::Low);
+        // let cs = Output::new(p.PIN_25, Level::High);
+        // let mut pio = Pio::new(p.PIO0, Irqs);
+        // let spi = PioSpi::new(&mut pio.common, pio.sm0, pio.irq0, cs, p.PIN_24, p.PIN_29, p.DMA_CH0);
+
+        // let (_net_device, mut control, runner) = cyw43::new(&mut state, pins.vbus_detect.into(), spi, fw).await;
+
+        // executor.run(|spawner: Spawner| {
+        //     spawner
+        //         .spawn(wifi_blinky(spawner, i2c_machine_shared, state))
+        //         .unwrap();
+        // })
+    }
+
+    if DO_JINGLE {
+        executor.run(|spawner: Spawner| {
+            // let spawn_token: SpawnToken<_> = task_pool.spawn(|| run(spawner, pins, state).into());
+            // spawner.spawn(spawn_token).unwrap();
+            spawner
+                .spawn(run_jingle_async(spawner, i2c_machine_shared, state))
+                .unwrap();
+        });
+    }
 
     loop {}
 
