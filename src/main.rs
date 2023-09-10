@@ -171,15 +171,22 @@ async fn wifi_blinky(
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
+    let mut scanner = control.scan().await;
+    while let Some(bss) = scanner.next().await {
+        if let Ok(ssid_str) = core::str::from_utf8(&bss.ssid) {
+            writeln!(comms.uart, "scanned {} == {:?}", ssid_str, bss.bssid).unwrap();
+        }
+    }
+
     // let delay = embassy_time::Duration::from_secs(1);
     loop {
-        writeln!(comms.uart, "led on!").unwrap();
-        control.gpio_set(0, true).await;
-        comms.delay(1000);
+        // writeln!(comms.uart, "led on!").unwrap();
+        // control.gpio_set(0, true).await;
+        // comms.delay(1000);
 
-        writeln!(comms.uart, "led off!").unwrap();
-        control.gpio_set(0, false).await;
-        comms.delay(1000);
+        // writeln!(comms.uart, "led off!").unwrap();
+        // control.gpio_set(0, false).await;
+        // comms.delay(1000);
     }
     // SpiDevice::
     // let pwr: alloc::boxed::Box<dyn OutputPin> = pwr.into();
