@@ -1,42 +1,42 @@
 //! Copied from rp-pac
-extern "C" {
-    fn TIMER_IRQ_0();
-    fn TIMER_IRQ_1();
-    fn TIMER_IRQ_2();
-    fn TIMER_IRQ_3();
-    fn PWM_IRQ_WRAP();
-    fn USBCTRL_IRQ();
-    fn XIP_IRQ();
-    fn PIO0_IRQ_0();
-    fn PIO0_IRQ_1();
-    fn PIO1_IRQ_0();
-    fn PIO1_IRQ_1();
-    fn DMA_IRQ_0();
-    fn DMA_IRQ_1();
-    fn IO_IRQ_BANK0();
-    fn IO_IRQ_QSPI();
-    fn SIO_IRQ_PROC0();
-    fn SIO_IRQ_PROC1();
-    fn CLOCKS_IRQ();
-    fn SPI0_IRQ();
-    fn SPI1_IRQ();
-    fn UART0_IRQ();
-    fn UART1_IRQ();
-    fn ADC_IRQ_FIFO();
-    fn I2C0_IRQ();
-    fn I2C1_IRQ();
-    fn RTC_IRQ();
-    fn SWI_IRQ_0();
-    fn SWI_IRQ_1();
-    fn SWI_IRQ_2();
-    fn SWI_IRQ_3();
-    fn SWI_IRQ_4();
-    fn SWI_IRQ_5();
-}
-pub union Vector {
-    _handler: unsafe extern "C" fn(),
-    _reserved: u32,
-}
+// extern "C" {
+//     fn TIMER_IRQ_0();
+//     fn TIMER_IRQ_1();
+//     fn TIMER_IRQ_2();
+//     fn TIMER_IRQ_3();
+//     fn PWM_IRQ_WRAP();
+//     fn USBCTRL_IRQ();
+//     fn XIP_IRQ();
+//     fn PIO0_IRQ_0();
+//     fn PIO0_IRQ_1();
+//     fn PIO1_IRQ_0();
+//     fn PIO1_IRQ_1();
+//     fn DMA_IRQ_0();
+//     fn DMA_IRQ_1();
+//     fn IO_IRQ_BANK0();
+//     fn IO_IRQ_QSPI();
+//     fn SIO_IRQ_PROC0();
+//     fn SIO_IRQ_PROC1();
+//     fn CLOCKS_IRQ();
+//     fn SPI0_IRQ();
+//     fn SPI1_IRQ();
+//     fn UART0_IRQ();
+//     fn UART1_IRQ();
+//     fn ADC_IRQ_FIFO();
+//     fn I2C0_IRQ();
+//     fn I2C1_IRQ();
+//     fn RTC_IRQ();
+//     fn SWI_IRQ_0();
+//     fn SWI_IRQ_1();
+//     fn SWI_IRQ_2();
+//     fn SWI_IRQ_3();
+//     fn SWI_IRQ_4();
+//     fn SWI_IRQ_5();
+// }
+// pub union Vector {
+//     _handler: unsafe extern "C" fn(),
+//     _reserved: u32,
+// }
 
 // #[link_section = ".vector_table.interrupts"]
 // #[no_mangle]
