@@ -6,6 +6,7 @@
 #![feature(type_alias_impl_trait)]
 
 mod byte_reader;
+// mod gspi;
 mod piicodev_bme280;
 mod piicodev_buzzer;
 mod piicodev_rgb;
@@ -13,7 +14,7 @@ mod piicodev_ssd1306;
 mod piicodev_unified;
 mod piicodev_vl53l1x;
 mod pins;
-mod time;
+// mod time;
 mod utils;
 
 use defmt_rtt as _;
@@ -36,8 +37,11 @@ use rp_pico::hal::{
 use crate::piicodev_rgb::PiicoDevRGB;
 use core::cell::RefCell;
 use core::fmt::Write;
+use cortex_m::delay::Delay;
 use embassy_executor::{Executor, Spawner};
-use embedded_hal::digital::v2::OutputPin;
+use embassy_rp::bind_interrupts;
+use embassy_rp::gpio::{Level, Output};
+use embassy_rp::pio::{InterruptHandler, Pio};
 use fugit::RateExtU32;
 use piicodev_buzzer::notes::Note;
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
@@ -109,17 +113,82 @@ async fn run_jingle_async(
     }
 }
 
+bind_interrupts!(struct Irqs {
+    PIO0_IRQ_0 => InterruptHandler<embassy_rp::peripherals::PIO0>;
+});
+
+#[embassy_executor::task]
+async fn wifi_task(
+    runner: cyw43::Runner<
+        'static,
+        Output<'static, embassy_rp::peripherals::PIN_23>,
+        cyw43_pio::PioSpi<
+            'static,
+            embassy_rp::peripherals::PIN_25,
+            embassy_rp::peripherals::PIO0,
+            0,
+            embassy_rp::peripherals::DMA_CH0,
+        >,
+    >,
+) -> ! {
+    runner.run().await
+}
+
 #[embassy_executor::task]
 async fn wifi_blinky(
     spawner: Spawner,
     comms: RefCell<I2CUnifiedMachine>,
-    state: &'static cyw43::State,
+    state: &'static mut cyw43::State,
+    embassy_peripherals: embassy_rp::Peripherals,
 ) -> ! {
-    loop {}
+    let fw: &[u8] = include_bytes!("../cyw43-firmware/43439A0.bin");
+    let clm: &[u8] = include_bytes!("../cyw43-firmware/43439A0_clm.bin");
+    let mut comms = comms.borrow_mut();
+    writeln!(comms.uart, "hehehhe").unwrap();
+
+    let pwr = Output::new(embassy_peripherals.PIN_23, Level::Low);
+    let cs = Output::new(embassy_peripherals.PIN_25, Level::High);
+    let mut pio = Pio::new(embassy_peripherals.PIO0, Irqs);
+    let spi = cyw43_pio::PioSpi::new(
+        &mut pio.common,
+        pio.sm0,
+        pio.irq0,
+        cs,
+        embassy_peripherals.PIN_24,
+        embassy_peripherals.PIN_29,
+        embassy_peripherals.DMA_CH0,
+    );
+
+    use embassy_futures::yield_now;
+    yield_now().await;
+    writeln!(comms.uart, "hooooo").unwrap();
+
+    let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+    defmt::unwrap!(spawner.spawn(wifi_task(runner)));
+
+    control.init(clm).await;
+    control
+        .set_power_management(cyw43::PowerManagementMode::PowerSave)
+        .await;
+
+    // let delay = embassy_time::Duration::from_secs(1);
+    loop {
+        writeln!(comms.uart, "led on!").unwrap();
+        control.gpio_set(0, true).await;
+        comms.delay(1000);
+
+        writeln!(comms.uart, "led off!").unwrap();
+        control.gpio_set(0, false).await;
+        comms.delay(1000);
+    }
+    // SpiDevice::
+    // let pwr: alloc::boxed::Box<dyn OutputPin> = pwr.into();
+    // let (driver, mut control, runner) = cyw43::new(&mut state, pwr.into(), spi, fw).await;
 }
 
 #[entry]
 fn main() -> ! {
+    let embassy_peripherals = embassy_rp::init(Default::default());
     let mut peripherals: pac::Peripherals =
         pac::Peripherals::take().expect("Cannot take peripherals");
 
@@ -141,7 +210,7 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let delay: Delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     let pins = crate::pins::pins::Pins::new(
         peripherals.IO_BANK0,
@@ -200,36 +269,46 @@ fn main() -> ! {
 
     if DO_BLINKY {
         // These are implicitly used by the spi driver if they are in the correct mode
-        let spi_cs: gpio::Pin<gpio::bank0::Gpio25, gpio::FunctionSpi, gpio::PullDown> =
-            pins.wl_cs.into_function();
 
-        // TODO should be high from the beginning :-(
-        spi_cs.into_push_pull_output().set_high().unwrap();
-        // spi_cs.into_push_pull_output().set_high().unwrap();
+        // let spi_cs: SpiCsPin = pins.wl_cs.into_function();
 
-        let mut spi_clk = pins.voltage_monitor_wl_clk.into_push_pull_output();
-        spi_clk.set_low().unwrap();
+        // // TODO should be high from the beginning :-(
+        // spi_cs.into_push_pull_output_in_state(gpio::PinState::High);
 
-        let spi_mosi_miso: gpio::Pin<gpio::bank0::Gpio24, gpio::FunctionSpi, gpio::PullDown> =
-            pins.wl_d.into_function();
-        spi_mosi_miso.into_push_pull_output().set_low().unwrap();
+        // let mut spi_clk: SpiClkPin = pins
+        //     .voltage_monitor_wl_clk
+        //     .into_push_pull_output_in_state(gpio::PinState::Low);
 
-        let mut comms = i2c_machine_shared.borrow_mut();
-        writeln!(comms.uart, "lolll").unwrap();
+        // let spi_mosi_miso: SpiMosiMisoPin = pins.wl_d.into_function();
+        // spi_mosi_miso.into_push_pull_output_in_state(gpio::PinState::Low);
 
-        // let pwr: gpio::Pin<gpio::bank0::> = pins.b_power_save;
-        // let pwr = Output::new(p.PIN_23, Level::Low);
-        // let cs = Output::new(p.PIN_25, Level::High);
+        // let pwr: PowerPin = pins.wl_on.into_push_pull_output();
+
         // let mut pio = Pio::new(p.PIO0, Irqs);
-        // let spi = PioSpi::new(&mut pio.common, pio.sm0, pio.irq0, cs, p.PIN_24, p.PIN_29, p.DMA_CH0);
+        // let spi = PioSpi::new(
+        //     &mut pio.common,
+        //     pio.sm0,
+        //     pio.irq0,
+        //     cs,
+        //     p.PIN_24,
+        //     p.PIN_29,
+        //     p.DMA_CH0,
+        // );
 
-        // let (_net_device, mut control, runner) = cyw43::new(&mut state, pins.vbus_detect.into(), spi, fw).await;
+        // let bus = GSpi::new(spi_clk, spi_mosi_miso);
+        // let spi: ExclusiveDevice<GSpi, SpiCsPin, embedded_hal_bus::spi::NoDelay> =
+        //     ExclusiveDevice::new_no_delay(bus, spi_cs);
 
-        // executor.run(|spawner: Spawner| {
-        //     spawner
-        //         .spawn(wifi_blinky(spawner, i2c_machine_shared, state))
-        //         .unwrap();
-        // })
+        executor.run(|spawner: Spawner| {
+            spawner
+                .spawn(wifi_blinky(
+                    spawner,
+                    i2c_machine_shared,
+                    state,
+                    embassy_peripherals,
+                ))
+                .unwrap();
+        })
     }
 
     if DO_JINGLE {
@@ -298,73 +377,75 @@ fn main() -> ! {
     //     }
     // }
 
-    const DO_DISTANCE: bool = true;
-    const DELAY: u16 = 40;
+    // const DO_DISTANCE: bool = true;
+    // const DELAY: u16 = 40;
 
-    if DO_DISTANCE {
-        let mut comms = i2c_machine_shared.borrow_mut();
-        let distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &mut comms);
-        let mut led: PiicoDevRGB = PiicoDevRGB::new(&mut comms);
-        let mut buzzer: PiicoDevBuzzer = PiicoDevBuzzer::new(&mut comms, Some(BuzzerVolume::Low));
-        led.set_brightness(16, &mut comms).unwrap();
+    // if DO_DISTANCE {
+    //     let mut comms = i2c_machine_shared.borrow_mut();
+    //     let distance_sensor: PiicoDevVL53L1X = PiicoDevVL53L1X::new(None, &mut comms);
+    //     let mut led: PiicoDevRGB = PiicoDevRGB::new(&mut comms);
+    //     let mut buzzer: PiicoDevBuzzer = PiicoDevBuzzer::new(&mut comms, Some(BuzzerVolume::Low));
+    //     led.set_brightness(16, &mut comms).unwrap();
 
-        let mut has_played: bool = false;
+    //     let mut has_played: bool = false;
 
-        loop {
-            let distance_reading_mm: u16 = distance_sensor.read(&mut comms).unwrap();
-            comms.delay(DELAY as u32);
-            if writeln!(comms.uart, "Distance: {}mm", distance_reading_mm).is_err() {
-                // Wiring probably isn't set up correctly
-            }
+    //     loop {
+    //         let distance_reading_mm: u16 = distance_sensor.read(&mut comms).unwrap();
+    //         comms.delay(DELAY as u32);
+    //         if writeln!(comms.uart, "Distance: {}mm", distance_reading_mm).is_err() {
+    //             // Wiring probably isn't set up correctly
+    //         }
 
-            let mut note: Note = Note::A3;
-            // Green light
-            if distance_reading_mm < 190 {
-                led.set_pixel(0, (0, 255, 0));
-                note = Note::A4;
-            } else {
-                led.set_pixel(0, (0, 0, 0));
-            }
+    //         let mut note: Note = Note::A3;
+    //         // Green light
+    //         if distance_reading_mm < 190 {
+    //             led.set_pixel(0, (0, 255, 0));
+    //             note = Note::A4;
+    //         } else {
+    //             led.set_pixel(0, (0, 0, 0));
+    //         }
 
-            // Yellow light
-            if distance_reading_mm < 120 {
-                led.set_pixel(1, (255, 255, 0));
-                note = Note::A5;
-            } else {
-                led.set_pixel(1, (0, 0, 0))
-            }
+    //         // Yellow light
+    //         if distance_reading_mm < 120 {
+    //             led.set_pixel(1, (255, 255, 0));
+    //             note = Note::A5;
+    //         } else {
+    //             led.set_pixel(1, (0, 0, 0))
+    //         }
 
-            // Red light
-            if distance_reading_mm < 60 {
-                led.set_pixel(2, (255, 0, 0));
-                note = Note::A6;
-                if !has_played {
-                    writeln!(comms.uart, "WUNESCAEB").unwrap();
-                    // buzzer.play_song(&HARMONY, &mut comms);
-                    has_played = true;
-                }
-            } else {
-                led.set_pixel(2, (0, 0, 0));
-            }
+    //         // Red light
+    //         if distance_reading_mm < 60 {
+    //             led.set_pixel(2, (255, 0, 0));
+    //             note = Note::A6;
+    //             if !has_played {
+    //                 writeln!(comms.uart, "WUNESCAEB").unwrap();
+    //                 // buzzer.play_song(&HARMONY, &mut comms);
+    //                 has_played = true;
+    //             }
+    //         } else {
+    //             led.set_pixel(2, (0, 0, 0));
+    //         }
 
-            if distance_reading_mm >= 190 {
-                led.clear(&mut comms).unwrap();
-            } else {
-                led.show(&mut comms).unwrap();
-                // Note is guaranteed to not be null in this flow
-                // buzzer.tone(&note, DELAY, &mut comms).unwrap();
-            }
-        }
-    }
+    //         if distance_reading_mm >= 190 {
+    //             led.clear(&mut comms).unwrap();
+    //         } else {
+    //             led.show(&mut comms).unwrap();
+    //             // Note is guaranteed to not be null in this flow
+    //             // buzzer.tone(&note, DELAY, &mut comms).unwrap();
+    //         }
+    //     }
+    // }
 
-    let mut count: u8 = 0;
-    let mut i = i2c_machine_shared.borrow_mut();
-    loop {
-        count += 1;
+    // let mut count: u8 = 0;
+    // let mut i = i2c_machine_shared.borrow_mut();
+    // loop {
+    //     count += 1;
 
-        writeln!(i.uart, "FINALLY GOT SERIAL COMMUNICATIONS {}", count).unwrap();
-        i.delay(1000);
-    }
+    //     writeln!(i.uart, "FINALLY GOT SERIAL COMMUNICATIONS {}", count).unwrap();
+    //     i.delay(1000);
+    // }
+
+    loop {}
 }
 
 // End of file

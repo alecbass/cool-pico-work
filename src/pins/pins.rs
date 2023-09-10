@@ -1,7 +1,8 @@
 // With all due respect to https://github.com/jannic/rp-hal/blob/pico-w/boards/rp-pico-w/src/lib.rs
+use rp_pico::hal::{bsp_pins, gpio};
 
 // GPIO 23, 24, 25 and 29 have been altered
-rp_pico::hal::bsp_pins!(
+bsp_pins!(
     /// GPIO 0 supports following functions:
     ///
     /// | Function     | Alias with applied function |
@@ -770,3 +771,10 @@ rp_pico::hal::bsp_pins!(
         name: voltage_monitor_wl_clk,
     },
 );
+
+pub type SpiCsPin = gpio::Pin<gpio::bank0::Gpio25, gpio::FunctionSpi, gpio::PullDown>;
+pub type SpiClkPin =
+    gpio::Pin<gpio::bank0::Gpio29, gpio::FunctionSio<gpio::SioOutput>, gpio::PullDown>;
+pub type SpiMosiMisoPin = gpio::Pin<gpio::bank0::Gpio24, gpio::FunctionSpi, gpio::PullDown>;
+pub type PowerPin =
+    gpio::Pin<gpio::bank0::Gpio23, gpio::FunctionSio<gpio::SioOutput>, gpio::PullDown>;

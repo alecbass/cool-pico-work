@@ -4,7 +4,7 @@ use core::cell::Cell;
 use core::cell::RefCell;
 use core::ops::DerefMut;
 
-use atomic_polyfill::{AtomicU8, Ordering};
+use atomic_polyfill::AtomicU8;
 use critical_section::CriticalSection;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::blocking_mutex::Mutex;
@@ -52,52 +52,70 @@ embassy_time::time_driver_impl!(static DRIVER: TimerDriver = TimerDriver{
 
 impl Driver for TimerDriver {
     fn now(&self) -> u64 {
-        self.now_instant().ticks()
+        1
     }
 
     unsafe fn allocate_alarm(&self) -> Option<AlarmHandle> {
-        let id = self
-            .next_alarm
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
-                if x < ALARM_COUNT as u8 {
-                    Some(x + 1)
-                } else {
-                    warn!("No alarm left");
-                    None
-                }
-            });
-
-        match id {
-            Ok(id) => Some(AlarmHandle::new(id)),
-            Err(_) => None,
-        }
+        Some(AlarmHandle::new(1))
     }
 
     fn set_alarm_callback(&self, alarm: AlarmHandle, callback: fn(*mut ()), ctx: *mut ()) {
-        let n = alarm.id() as usize;
-        critical_section::with(|cs| {
-            let alarm = &self.alarms.borrow(cs)[n];
-            alarm.callback.set(Some((callback, ctx)));
-        })
+        callback(ctx)
     }
 
     fn set_alarm(&self, alarm: AlarmHandle, timestamp: u64) -> bool {
-        let n = alarm.id() as usize;
-        critical_section::with(|cs| {
-            let alarms = self.alarms.borrow(cs);
-            let alarm = &alarms[n];
-            if alarm.timestamp.get().ticks() == timestamp {
-                // redundant set_alarm - ignore
-                return true;
-            }
-            alarm.timestamp.set(Instant::from_ticks(timestamp));
-
-            self.arm(cs);
-            trace!("set alarm {} to {}", n, timestamp);
-            true
-        })
+        true
     }
 }
+
+// impl Driver for TimerDriver {
+//     fn now(&self) -> u64 {
+//         self.now_instant().ticks()
+//     }
+
+//     unsafe fn allocate_alarm(&self) -> Option<AlarmHandle> {
+//         let id = self
+//             .next_alarm
+//             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
+//                 if x < ALARM_COUNT as u8 {
+//                     Some(x + 1)
+//                 } else {
+//                     warn!("No alarm left");
+//                     None
+//                 }
+//             });
+
+//         match id {
+//             Ok(id) => Some(AlarmHandle::new(id)),
+//             Err(_) => None,
+//         }
+//     }
+
+//     fn set_alarm_callback(&self, alarm: AlarmHandle, callback: fn(*mut ()), ctx: *mut ()) {
+//         let n = alarm.id() as usize;
+//         critical_section::with(|cs| {
+//             let alarm = &self.alarms.borrow(cs)[n];
+//             alarm.callback.set(Some((callback, ctx)));
+//         })
+//     }
+
+//     fn set_alarm(&self, alarm: AlarmHandle, timestamp: u64) -> bool {
+//         let n = alarm.id() as usize;
+//         critical_section::with(|cs| {
+//             let alarms = self.alarms.borrow(cs);
+//             let alarm = &alarms[n];
+//             if alarm.timestamp.get().ticks() == timestamp {
+//                 // redundant set_alarm - ignore
+//                 return true;
+//             }
+//             alarm.timestamp.set(Instant::from_ticks(timestamp));
+
+//             self.arm(cs);
+//             trace!("set alarm {} to {}", n, timestamp);
+//             true
+//         })
+//     }
+// }
 
 impl TimerDriver {
     fn now_instant(&self) -> Instant {
