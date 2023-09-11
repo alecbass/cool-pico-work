@@ -135,6 +135,11 @@ async fn wifi_task(
 }
 
 #[embassy_executor::task]
+async fn net_task(stack: &'static embassy_net::Stack<cyw43::NetDriver<'static>>) -> ! {
+    stack.run().await
+}
+
+#[embassy_executor::task]
 async fn wifi_blinky(
     spawner: Spawner,
     comms: RefCell<I2CUnifiedMachine>,
@@ -163,7 +168,7 @@ async fn wifi_blinky(
     yield_now().await;
     writeln!(comms.uart, "hooooo").unwrap();
 
-    let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+    let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
     defmt::unwrap!(spawner.spawn(wifi_task(runner)));
 
     control.init(clm).await;
@@ -171,10 +176,43 @@ async fn wifi_blinky(
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
-    let mut scanner = control.scan().await;
-    while let Some(bss) = scanner.next().await {
-        if let Ok(ssid_str) = core::str::from_utf8(&bss.ssid) {
-            writeln!(comms.uart, "scanned {} == {:?}", ssid_str, bss.bssid).unwrap();
+    let config = embassy_net::Config::dhcpv4(Default::default());
+    //let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
+    //    address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 69, 2), 24),
+    //    dns_servers: Vec::new(),
+    //    gateway: Some(Ipv4Address::new(192, 168, 69, 1)),
+    //});
+
+    // Generate random seed
+    let seed = 0x0123_4567_89ab_cdef; // chosen by fair dice roll. guarenteed to be random.
+
+    // Init network stack
+    let stack = &*make_static!(embassy_net::Stack::new(
+        net_device,
+        config,
+        make_static!(embassy_net::StackResources::<2>::new()),
+        seed
+    ));
+
+    defmt::unwrap!(spawner.spawn(net_task(stack)));
+
+    // let mut scanner = control.scan().await;
+    // while let Some(bss) = scanner.next().await {
+    //     if let Ok(ssid_str) = core::str::from_utf8(&bss.ssid) {
+    //         writeln!(comms.uart, "scanned {} == {:?}", ssid_str, bss.bssid).unwrap();
+    //     }
+    // }
+
+    const WIFI_NETWORK: &'static str = "name";
+    const WIFI_PASSWORD: &'static str = "password";
+
+    loop {
+        //control.join_open(WIFI_NETWORK).await;
+        match control.join_wpa2(WIFI_NETWORK, WIFI_PASSWORD).await {
+            Ok(_) => break,
+            Err(err) => {
+                writeln!(comms.uart, "join failed with status={}", err.status).unwrap();
+            }
         }
     }
 
