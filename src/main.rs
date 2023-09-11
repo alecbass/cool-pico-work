@@ -216,19 +216,60 @@ async fn wifi_blinky(
         }
     }
 
-    // let delay = embassy_time::Duration::from_secs(1);
-    loop {
-        // writeln!(comms.uart, "led on!").unwrap();
-        // control.gpio_set(0, true).await;
-        // comms.delay(1000);
+    // And now we can use it!
 
-        // writeln!(comms.uart, "led off!").unwrap();
-        // control.gpio_set(0, false).await;
-        // comms.delay(1000);
+    let mut rx_buffer = [0; 4096];
+    let mut tx_buffer = [0; 4096];
+    let mut buf = [0; 4096];
+
+    loop {
+        let mut socket = embassy_net::tcp::TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
+
+        control.gpio_set(0, false).await;
+        writeln!(comms.uart, "Listening on TCP:1234...").unwrap();
+        if let Err(e) = socket.accept(1234).await {
+            writeln!(comms.uart, "accept error: {:?}", e).unwrap();
+            continue;
+        }
+
+        writeln!(
+            comms.uart,
+            "Received connection from {:?}",
+            socket.remote_endpoint()
+        )
+        .unwrap();
+        control.gpio_set(0, true).await;
+
+        loop {
+            let n = match socket.read(&mut buf).await {
+                Ok(0) => {
+                    writeln!(comms.uart, "read EOF").unwrap();
+                    break;
+                }
+                Ok(n) => n,
+                Err(e) => {
+                    writeln!(comms.uart, "read error: {:?}", e).unwrap();
+                    break;
+                }
+            };
+
+            writeln!(
+                comms.uart,
+                "rxd {}",
+                core::str::from_utf8(&buf[..n]).unwrap()
+            )
+            .unwrap();
+
+            match embedded_io_async::Write::write_all(&mut socket, &buf[..n]).await {
+                Ok(()) => {}
+                Err(e) => {
+                    writeln!(comms.uart, "write error: {:?}", e).unwrap();
+                    break;
+                }
+            };
+        }
     }
-    // SpiDevice::
-    // let pwr: alloc::boxed::Box<dyn OutputPin> = pwr.into();
-    // let (driver, mut control, runner) = cyw43::new(&mut state, pwr.into(), spi, fw).await;
 }
 
 #[entry]

@@ -189,6 +189,7 @@ dependencies = [
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-rc.1",
  "embedded-hal-bus",
+ "embedded-io-async",
  "fugit",
  "libm",
  "panic-probe",

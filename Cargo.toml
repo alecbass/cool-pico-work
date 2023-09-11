@@ -67,6 +67,7 @@ critical-section = "1.1.2"
 atomic-polyfill = "1.0.3"
 embedded-hal-bus = "0.1.0-rc.1"
 embedded-hal-1 = { version = "0.2.7", package = "embedded-hal" }
+embedded-io-async = "0.5.0"
 
 [patch.crates-io]
 rp2040-pac = { git = "https://github.com/alecbass/rp2040-pac.git", branch = "remove-interrupts" }
