@@ -141,6 +141,46 @@ async fn net_task(stack: &'static embassy_net::Stack<cyw43::NetDriver<'static>>)
     stack.run().await
 }
 
+// TODO: Make into its own file
+struct Message<'a> {
+    current_len: usize,
+    message: &'a mut [u8],
+}
+
+impl<'a> Write for Message<'a> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let str_bytes: &[u8] = s.as_bytes();
+        // self.current_len = str_bytes.len();
+
+        // for i in 0..self.current_len {
+        //     self.message[i] = str_bytes[i];
+        // }
+
+        // Skip over already-copied data
+        let remainder = &mut self.message[self.current_len..];
+        // Check if there is space remaining (return error instead of panicking)
+        if remainder.len() < str_bytes.len() {
+            return Err(core::fmt::Error);
+        }
+        // Make the two slices the same length
+        let remainder = &mut remainder[..str_bytes.len()];
+        // Copy
+        remainder.copy_from_slice(str_bytes);
+
+        // Update offset to avoid overwriting
+        self.current_len += str_bytes.len();
+
+        Ok(())
+    }
+}
+
+impl<'a> Message<'a> {
+    pub fn reset(&mut self) {
+        self.current_len = 0;
+        self.message.copy_from_slice(&[0; 128]);
+    }
+}
+
 #[embassy_executor::task]
 async fn wifi_blinky(
     spawner: Spawner,
@@ -225,7 +265,7 @@ async fn wifi_blinky(
     let mut buf: [u8; 4096] = [0; 4096];
 
     let addr: embassy_net::IpEndpoint = embassy_net::IpEndpoint::new(
-        embassy_net::IpAddress::Ipv4(embassy_net::Ipv4Address([192, 168, 0, 12])),
+        embassy_net::IpAddress::Ipv4(embassy_net::Ipv4Address([192, 168, 137, 1])),
         40000,
     );
 
@@ -238,7 +278,7 @@ async fn wifi_blinky(
         let mut socket = embassy_net::tcp::TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
 
-        control.gpio_set(0, false).await;
+        control.gpio_set(0, true).await;
 
         if let Err(e) = socket.connect(addr).await {
             writeln!(comms.uart, "connect error: {:?} {:?}", addr, e).unwrap();
@@ -246,7 +286,9 @@ async fn wifi_blinky(
             continue;
         }
 
-        control.gpio_set(0, true).await;
+        writeln!(comms.uart, "Writing HTTP Request").unwrap();
+
+        control.gpio_set(0, false).await;
 
         // let mut client = HttpClient::new(&socket, StaticDns); // Types implementing embedded-nal-async
         // let mut rx_buf = [0; 4096];
@@ -260,23 +302,32 @@ async fn wifi_blinky(
         //     .await
         //     .unwrap();
 
+        let mut message: Message = Message {
+            current_len: 0,
+            message: &mut [0; 128],
+        };
+        writeln!(comms.uart, "Initiating read-write").unwrap();
         loop {
-            // let n = match socket.read(&mut buf).await {
-            //     Ok(0) => {
-            //         writeln!(comms.uart, "read EOF").unwrap();
-            //         break;
-            //     }
-            //     Ok(n) => n,
-            //     Err(e) => {
-            //         writeln!(comms.uart, "read error: {:?}", e).unwrap();
-            //         break;
-            //     }
-            // };
-
             // request.write(&mut buf);
 
-            match embedded_io_async::Write::write_all(&mut socket, b"GET / HTTP/1.0\r\n\r\n").await
-            {
+            let message_content: &str = "{ \"message\": \"Hello\" }";
+            let message_content_bytes: usize = message_content.len();
+
+            if let Err(e) = write!(message, "POST /details HTTP/1.1\r\nHost:192.168.137.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}\r\n", message_content_bytes, message_content) {
+                writeln!(comms.uart, "Message write error: {:?}", e).unwrap();
+                continue;
+            }
+            // let message: &str = core::format_args!(
+            //     "POST /details HTTP/1.1\r\nHost:192.168.137.1\r\nContent-Type: application/json\r\nContent-Length: 22\r\n\r\n{}\r\n", message_content
+            // );
+            // .unwrap(); //"POST /details/ HTTP/1.1\r\nHost:192.168.137.1\r\n\r\n";
+            // writeln!(comms.uart, "{}", message.message).unwrap();
+            let to_write: &[u8] = &message.message;
+
+            let test_str: &str = core::str::from_utf8(to_write).unwrap();
+            writeln!(comms.uart, "Message: {}", test_str).unwrap();
+
+            match embedded_io_async::Write::write_all(&mut socket, to_write).await {
                 Ok(()) => {}
                 Err(e) => {
                     writeln!(comms.uart, "write error: {:?}", e).unwrap();
@@ -285,7 +336,28 @@ async fn wifi_blinky(
                 }
             };
 
-            comms.delay(5000);
+            comms.delay(1000);
+
+            let bytes_read = match socket.read(&mut buf).await {
+                Ok(0) => {
+                    writeln!(comms.uart, "read EOF").unwrap();
+                    break;
+                }
+                Ok(n) => n,
+                Err(e) => {
+                    writeln!(comms.uart, "read error: {:?}", e).unwrap();
+                    break;
+                }
+            };
+
+            writeln!(
+                comms.uart,
+                "rxd {}",
+                core::str::from_utf8(&buf[..bytes_read]).unwrap()
+            )
+            .unwrap();
+
+            message.reset();
         }
     }
 }
