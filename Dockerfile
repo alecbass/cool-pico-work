@@ -44,6 +44,8 @@ RUN udevadm control --reload-rules || echo "done"
 RUN chown -R ${USERNAME}:${USERNAME} /app
 USER ${USERNAME}
 
+RUN source .env
+
 # CMD [ "./build.sh" ]
 
 # To launch with udev and USB volumes, run

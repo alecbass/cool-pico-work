@@ -47,6 +47,8 @@ use piicodev_buzzer::notes::Note;
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_unified::{I2CUnifiedMachine, GPIO89I2C};
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
+use reqwless::client::HttpClient;
+use reqwless::request::{Method, Request, RequestBuilder};
 use static_cell::make_static;
 
 const FLASH_TIMERS: &[u32] = &[200, 1000, 100, 500];
@@ -166,7 +168,6 @@ async fn wifi_blinky(
 
     use embassy_futures::yield_now;
     yield_now().await;
-    writeln!(comms.uart, "hooooo").unwrap();
 
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
     defmt::unwrap!(spawner.spawn(wifi_task(runner)));
@@ -203,71 +204,88 @@ async fn wifi_blinky(
     //     }
     // }
 
-    const WIFI_NETWORK: &'static str = "name";
-    const WIFI_PASSWORD: &'static str = "password";
+    let wifi_network: &'static str = option_env!("WIFI_NETWORK").unwrap();
+    let wifi_password: &'static str = option_env!("WIFI_PASSWORD").unwrap();
 
     loop {
         //control.join_open(WIFI_NETWORK).await;
-        match control.join_wpa2(WIFI_NETWORK, WIFI_PASSWORD).await {
+        match control.join_wpa2(wifi_network, wifi_password).await {
             Ok(_) => break,
             Err(err) => {
-                writeln!(comms.uart, "join failed with status={}", err.status).unwrap();
+                writeln!(comms.uart, "join failed with status={:?}", err).unwrap();
             }
         }
     }
 
     // And now we can use it!
+    writeln!(comms.uart, "We're in!").unwrap();
 
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
-    let mut buf = [0; 4096];
+    let mut buf: [u8; 4096] = [0; 4096];
+
+    let addr: embassy_net::IpEndpoint = embassy_net::IpEndpoint::new(
+        embassy_net::IpAddress::Ipv4(embassy_net::Ipv4Address([192, 168, 0, 12])),
+        40000,
+    );
+
+    const URL: &'static str = "http://192.168.0.12:40000/details";
+
+    // let request = Request::get(URL).build();
+    // embedded_io_async::Write::write(&mut request, buf);
 
     loop {
         let mut socket = embassy_net::tcp::TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
 
         control.gpio_set(0, false).await;
-        writeln!(comms.uart, "Listening on TCP:1234...").unwrap();
-        if let Err(e) = socket.accept(1234).await {
-            writeln!(comms.uart, "accept error: {:?}", e).unwrap();
+
+        if let Err(e) = socket.connect(addr).await {
+            writeln!(comms.uart, "connect error: {:?} {:?}", addr, e).unwrap();
+            comms.delay(2000);
             continue;
         }
 
-        writeln!(
-            comms.uart,
-            "Received connection from {:?}",
-            socket.remote_endpoint()
-        )
-        .unwrap();
         control.gpio_set(0, true).await;
 
+        // let mut client = HttpClient::new(&socket, StaticDns); // Types implementing embedded-nal-async
+        // let mut rx_buf = [0; 4096];
+        // let response = client
+        //     .request(Method::POST, &url)
+        //     .await
+        //     .unwrap()
+        //     .body(b"PING")
+        //     .content_type(ContentType::TextPlain)
+        //     .send(&mut rx_buf)
+        //     .await
+        //     .unwrap();
+
         loop {
-            let n = match socket.read(&mut buf).await {
-                Ok(0) => {
-                    writeln!(comms.uart, "read EOF").unwrap();
-                    break;
-                }
-                Ok(n) => n,
-                Err(e) => {
-                    writeln!(comms.uart, "read error: {:?}", e).unwrap();
-                    break;
-                }
-            };
+            // let n = match socket.read(&mut buf).await {
+            //     Ok(0) => {
+            //         writeln!(comms.uart, "read EOF").unwrap();
+            //         break;
+            //     }
+            //     Ok(n) => n,
+            //     Err(e) => {
+            //         writeln!(comms.uart, "read error: {:?}", e).unwrap();
+            //         break;
+            //     }
+            // };
 
-            writeln!(
-                comms.uart,
-                "rxd {}",
-                core::str::from_utf8(&buf[..n]).unwrap()
-            )
-            .unwrap();
+            // request.write(&mut buf);
 
-            match embedded_io_async::Write::write_all(&mut socket, &buf[..n]).await {
+            match embedded_io_async::Write::write_all(&mut socket, b"GET / HTTP/1.0\r\n\r\n").await
+            {
                 Ok(()) => {}
                 Err(e) => {
                     writeln!(comms.uart, "write error: {:?}", e).unwrap();
+                    comms.delay(2000);
                     break;
                 }
             };
+
+            comms.delay(5000);
         }
     }
 }
@@ -283,9 +301,9 @@ fn main() -> ! {
     let sio: Sio = Sio::new(peripherals.SIO);
 
     // External high-speed crystal on the pico board is 12Mhz
-    let external_xtal_freq_hz = 12_000_000u32;
+    const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
     let clocks = init_clocks_and_plls(
-        external_xtal_freq_hz,
+        EXTERNAL_XTAL_FREQ_HZ,
         peripherals.XOSC,
         peripherals.CLOCKS,
         peripherals.PLL_SYS,
