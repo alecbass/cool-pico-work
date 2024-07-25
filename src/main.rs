@@ -8,7 +8,6 @@ use bsp::entry;
 use cortex_m::delay::Delay;
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::OutputPin;
 use embedded_hal::i2c::I2c;
 use fugit::RateExtU32;
 use panic_probe as _;
@@ -18,26 +17,24 @@ use panic_probe as _;
 use rp_pico as bsp;
 // use sparkfun_pro_micro_rp2040 as bsp;
 
-use bsp::hal::gpio::bank0::{Gpio0, Gpio1};
-use bsp::hal::gpio::{FunctionI2C, FunctionUart, Pin, PullNone, PullUp};
+use bsp::hal::gpio::{FunctionI2C, FunctionUart, PullNone, PullUp};
 use bsp::hal::i2c::I2C;
-use bsp::hal::uart::{DataBits, Enabled, StopBits, UartConfig, UartPeripheral};
+use bsp::hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     pac,
     sio::Sio,
     watchdog::Watchdog,
 };
-use bsp::pac::UART0;
 use bsp::Pins;
 
-type UartPins = (
-    Pin<Gpio0, FunctionUart, PullNone>,
-    Pin<Gpio1, FunctionUart, PullNone>,
-);
+mod i2c;
+mod piicodev_rgb;
+mod uart;
 
-/// Alias the type for our UART to make things clearer.
-type Uart = UartPeripheral<Enabled, UART0, UartPins>;
+use i2c::I2CHandler;
+use piicodev_rgb::PiicoDevRGB;
+use uart::{Uart, UartPins};
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
@@ -107,7 +104,7 @@ fn main() -> ! {
     // Write something to the UART on start-up so we can check the output pin
     // is wired correctly.
 
-    let mut i2c = I2C::i2c0(
+    let mut i2c: I2CHandler = I2C::i2c0(
         pac.I2C0,
         pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
         pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
@@ -116,26 +113,22 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
-    // Peripheral address of the PiicoDev RGB device
-    const RGB_ADDR: u8 = 0x1E;
-    // Address of the LED
-    const REG_CTRL: u8 = 0x03;
-    // Address of the brightness controller
-    const REG_BRIGHT: u8 = 0x06;
-    // Address of where to send LED colour colours
-    const REG_LED_VALS: u8 = 0x07;
+    // Set up the RGB device
+    let mut rgb = PiicoDevRGB::new(&mut i2c);
 
     // Turn the LED on
-    i2c.write(RGB_ADDR, &[REG_CTRL, 1]).unwrap();
+    rgb.power_led(true).unwrap();
 
     loop {
         for i in 0..10 {
             // Set brightness
-            i2c.write(RGB_ADDR, &[REG_BRIGHT, i * 2]).unwrap();
+            rgb.set_brightness(i * 2).unwrap();
 
             // Set colours
-            let colours = [REG_LED_VALS, 255, 0, 0, 0, 255, 0, 0, 0, 255];
-            i2c.write(RGB_ADDR, &colours).unwrap();
+            rgb.set_pixel(0, (255, 0, 0));
+            rgb.set_pixel(1, (0, 255, 0));
+            rgb.set_pixel(2, (0, 0, 255));
+            rgb.show().unwrap();
 
             uart.write_full_blocking(b"uart_interrupt example started...\n");
             delay.delay_ms(200);
