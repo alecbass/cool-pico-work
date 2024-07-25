@@ -4,11 +4,13 @@
 #![no_std]
 #![no_main]
 
-use bsp::entry;
+use core::borrow::BorrowMut;
+use core::cell::RefCell;
+use core::fmt::Write;
+
 use cortex_m::delay::Delay;
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::i2c::I2c;
 use fugit::RateExtU32;
 use panic_probe as _;
 
@@ -17,6 +19,7 @@ use panic_probe as _;
 use rp_pico as bsp;
 // use sparkfun_pro_micro_rp2040 as bsp;
 
+use bsp::entry;
 use bsp::hal::gpio::{FunctionI2C, FunctionUart, PullNone, PullUp};
 use bsp::hal::i2c::I2C;
 use bsp::hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
@@ -30,10 +33,12 @@ use bsp::Pins;
 
 mod i2c;
 mod piicodev_rgb;
+mod piicodev_vl53l1x;
 mod uart;
 
 use i2c::I2CHandler;
 use piicodev_rgb::PiicoDevRGB;
+use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
 use uart::{Uart, UartPins};
 
 /// This how we transfer the UART into the Interrupt Handler
@@ -66,7 +71,7 @@ fn main() -> ! {
     .unwrap();
 
     // Lets us wait for fixed periods of time
-    let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     // Set the pins to their default state
     let pins = Pins::new(
@@ -104,7 +109,7 @@ fn main() -> ! {
     // Write something to the UART on start-up so we can check the output pin
     // is wired correctly.
 
-    let mut i2c: I2CHandler = I2C::i2c0(
+    let i2c: I2CHandler = I2C::i2c0(
         pac.I2C0,
         pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
         pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
@@ -113,27 +118,39 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
+    // Turn IO devices into shared pointers
+    let i2c_cell = RefCell::new(i2c);
+    let uart_cell = RefCell::new(uart);
+    let delay_cell = RefCell::new(delay);
+
+    let mut distance_sensor = PiicoDevVL53L1X::new(None, &i2c_cell, &uart_cell, &delay_cell);
+    distance_sensor.init().unwrap();
+
     // Set up the RGB device
-    let mut rgb = PiicoDevRGB::new(&mut i2c);
+    let mut rgb = PiicoDevRGB::new(&i2c_cell);
 
     // Turn the LED on
     rgb.power_led(true).unwrap();
 
     loop {
-        for i in 0..10 {
-            // Set brightness
-            rgb.set_brightness(i * 2).unwrap();
+        let reading = distance_sensor.read().unwrap();
 
-            // Set colours
-            rgb.set_pixel(0, (255, 0, 0));
-            rgb.set_pixel(1, (0, 255, 0));
-            rgb.set_pixel(2, (0, 0, 255));
-            rgb.show().unwrap();
+        let mut uart = uart_cell.borrow_mut();
+        let mut delay = delay_cell.borrow_mut();
 
-            uart.write_full_blocking(b"uart_interrupt example started...\n");
-            delay.delay_ms(200);
-        }
-        // uart.read(&mut buffer).unwrap();
+        writeln!(uart, "Distance: {}", reading).unwrap();
+
+        // Set brightness
+        rgb.set_brightness(10).unwrap();
+
+        // Set colours
+        rgb.set_pixel(0, (255, 0, 0));
+        rgb.set_pixel(1, (0, 255, 0));
+        rgb.set_pixel(2, (0, 0, 255));
+        rgb.show().unwrap();
+
+        uart.write_full_blocking(b"Working on the distance sensor...\n");
+        delay.delay_ms(100);
     }
 }
 

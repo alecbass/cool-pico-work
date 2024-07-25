@@ -1,3 +1,5 @@
+use core::cell::RefCell;
+
 use rp_pico as bsp;
 
 use bsp::hal::i2c::Error;
@@ -26,11 +28,11 @@ pub struct PiicoDevRGB<'i2c> {
     addr: u8,
     led: [RGB; 3],
     bright: u8,
-    i2c: &'i2c mut I2CHandler,
+    i2c: &'i2c RefCell<I2CHandler>,
 }
 
 impl<'i2c> PiicoDevRGB<'i2c> {
-    pub fn new(i2c: &'i2c mut I2CHandler) -> Self {
+    pub fn new(i2c: &'i2c RefCell<I2CHandler>) -> Self {
         Self {
             addr: BASE_ADDR,
             led: [(0, 0, 0), (0, 0, 0), (0, 0, 0)],
@@ -44,10 +46,12 @@ impl<'i2c> PiicoDevRGB<'i2c> {
     }
 
     // fn set_i2c_addr(&mut self, new_addr: u8) -> Result<(), Error> {
-    //     self.i2c.write(self.addr, &[REG_I2C_ADDR, new_addr])
+    //     i2c.write(self.addr, &[REG_I2C_ADDR, new_addr])
     // }
 
     pub fn show(&mut self) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
         let buffer = [
             REG_LED_VALS,
             self.led[0].0,
@@ -61,11 +65,13 @@ impl<'i2c> PiicoDevRGB<'i2c> {
             self.led[2].2,
         ];
 
-        self.i2c.write(self.addr, &buffer)
+        i2c.write(self.addr, &buffer)
     }
 
     pub fn clear(&mut self) -> Result<(), Error> {
-        self.i2c.write(self.addr, &[REG_CLEAR, 0x01])?;
+        let mut i2c = self.i2c.borrow_mut();
+
+        i2c.write(self.addr, &[REG_CLEAR, 0x01])?;
         self.led = [(0, 0, 0), (0, 0, 0), (0, 0, 0)];
 
         Ok(())
@@ -80,16 +86,20 @@ impl<'i2c> PiicoDevRGB<'i2c> {
     // }
 
     pub fn set_brightness(&mut self, x: u8) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
         self.bright = x;
-        self.i2c.write(self.addr, &[REG_BRIGHT, self.bright])
+        i2c.write(self.addr, &[REG_BRIGHT, self.bright])
     }
 
     pub fn power_led(&mut self, state: bool) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
         let state_value: u8 = match state {
             true => 1,
             false => 0,
         };
 
-        self.i2c.write(self.addr, &[REG_CTRL, state_value])
+        i2c.write(self.addr, &[REG_CTRL, state_value])
     }
 }
