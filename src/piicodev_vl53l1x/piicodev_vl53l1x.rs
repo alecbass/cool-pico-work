@@ -1,43 +1,31 @@
-use core::{borrow::BorrowMut, cell::RefCell};
+use core::cell::RefCell;
 
 use cortex_m::delay::Delay;
 use embedded_hal::i2c::I2c;
 use rp_pico::hal::i2c::Error;
 
-use crate::{i2c::I2CHandler, uart::Uart};
+use crate::i2c::I2CHandler;
 
-use super::constants::VL51L1X_DEFAULT_CONFIGURATION;
-
-const _DEFAULT_MODEL_ID: u16 = 0xEACC;
-
-// Device address
-const BASE_ADDR: u8 = 0x29;
+use super::constants::{BASE_ADDR, VL51L1X_DEFAULT_CONFIGURATION};
 
 // Used for the read() method
 const READ_BUFFER_SIZE: usize = 17;
 
-pub struct PiicoDevVL53L1X<'i2c, 'uart, 'delay> {
+pub struct PiicoDevVL53L1X<'i2c, 'delay> {
     pub addr: u8,
     i2c: &'i2c RefCell<I2CHandler>,
-    uart: &'uart RefCell<Uart>,
     delay: &'delay RefCell<Delay>,
 }
 
-impl<'i2c, 'uart, 'delay> PiicoDevVL53L1X<'i2c, 'uart, 'delay> {
+impl<'i2c, 'delay> PiicoDevVL53L1X<'i2c, 'delay> {
     pub fn new(
         addr: Option<u8>,
         i2c: &'i2c RefCell<I2CHandler>,
-        uart: &'uart RefCell<Uart>,
         delay: &'delay RefCell<Delay>,
     ) -> Self {
         let addr = addr.unwrap_or(BASE_ADDR);
 
-        Self {
-            addr,
-            i2c,
-            uart,
-            delay,
-        }
+        Self { addr, i2c, delay }
     }
 
     pub fn init(&mut self) -> Result<(), Error> {

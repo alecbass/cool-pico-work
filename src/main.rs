@@ -122,7 +122,7 @@ fn main() -> ! {
     let uart_cell = RefCell::new(uart);
     let delay_cell = RefCell::new(delay);
 
-    let mut distance_sensor = PiicoDevVL53L1X::new(None, &i2c_cell, &uart_cell, &delay_cell);
+    let mut distance_sensor = PiicoDevVL53L1X::new(None, &i2c_cell, &delay_cell);
     distance_sensor.init().unwrap();
 
     // Set up the RGB device

@@ -9,13 +9,13 @@ use crate::i2c::I2CHandler;
 
 // Peripheral address of the PiicoDev RGB device
 const BASE_ADDR: u8 = 0x1E;
-const DEV_ID: u8 = 0x84;
-const REG_DEV_ID: u8 = 0x00;
-const REG_FIRM_VER: u8 = 0x01;
+const _DEV_ID: u8 = 0x84;
+const _REG_DEV_ID: u8 = 0x00;
+const _REG_FIRM_VER: u8 = 0x01;
 // Address of the LED
 const REG_CTRL: u8 = 0x03;
-const REG_CLEAR: u8 = 0x04;
-const REG_I2C_ADDR: u8 = 0x05;
+const _REG_CLEAR: u8 = 0x04;
+const _REG_I2C_ADDR: u8 = 0x05;
 // Address of the brightness controller
 const REG_BRIGHT: u8 = 0x06;
 // Address of where to send LED colour colours
@@ -68,14 +68,14 @@ impl<'i2c> PiicoDevRGB<'i2c> {
         i2c.write(self.addr, &buffer)
     }
 
-    pub fn clear(&mut self) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
-        i2c.write(self.addr, &[REG_CLEAR, 0x01])?;
-        self.led = [(0, 0, 0), (0, 0, 0), (0, 0, 0)];
-
-        Ok(())
-    }
+    // pub fn clear(&mut self) -> Result<(), Error> {
+    //     let mut i2c = self.i2c.borrow_mut();
+    //
+    //     i2c.write(self.addr, &[REG_CLEAR, 0x01])?;
+    //     self.led = [(0, 0, 0), (0, 0, 0), (0, 0, 0)];
+    //
+    //     Ok(())
+    // }
 
     // pub fn fill(&mut self, c: u8) -> Result<(), Error> {
     //     for i in 0..self.led.len() {

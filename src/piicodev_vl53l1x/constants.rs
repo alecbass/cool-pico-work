@@ -1,4 +1,4 @@
-pub const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
+pub(super) const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
     0x00, // Register padding
     0x2D, // Register
     0x00, // 0x2d : set bit 2 and 5 to 1 for fast plus mode (1MHz I2C), else don't touch */
@@ -93,3 +93,8 @@ pub const VL51L1X_DEFAULT_CONFIGURATION: &[u8] = &[
     0x01, // 0x86 : clear interrupt, use ClearInterrupt() */
     0x40, // 0x87 : start ranging, use StartRanging() or StopRanging(), If you want an automatic start after VL53L1X_init() call, put 0x40 in location 0x87 */
 ];
+
+pub(super) const _DEFAULT_MODEL_ID: u16 = 0xEACC;
+
+// Device address
+pub(super) const BASE_ADDR: u8 = 0x29;
