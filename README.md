@@ -13,3 +13,11 @@ Using both rp-pico and embassy has provided some weird linker __INTERRUPTS linke
 
 # OpenOCD compilation notes
 I had to remove the -Wstrict-prototypes and -Werror GCC flags from OpenOCD's Makefile
+
+# Reading UART
+Minicom doesn't seem to read anything, so I've had more access using this method (lol)
+
+```
+sudo chmod a+rw /dev/ttyACM0
+cat /dev/ttyACM0
+```
