@@ -9,6 +9,7 @@ use cortex_m::delay::Delay;
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::digital::OutputPin;
+use embedded_hal::i2c::I2c;
 use fugit::RateExtU32;
 use panic_probe as _;
 
@@ -18,7 +19,8 @@ use rp_pico as bsp;
 // use sparkfun_pro_micro_rp2040 as bsp;
 
 use bsp::hal::gpio::bank0::{Gpio0, Gpio1};
-use bsp::hal::gpio::{FunctionUart, Pin, PullNone};
+use bsp::hal::gpio::{FunctionI2C, FunctionUart, Pin, PullNone, PullUp};
+use bsp::hal::i2c::I2C;
 use bsp::hal::uart::{DataBits, Enabled, StopBits, UartConfig, UartPeripheral};
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
@@ -28,8 +30,6 @@ use bsp::hal::{
 };
 use bsp::pac::UART0;
 use bsp::Pins;
-
-mod piicodev_rgb;
 
 type UartPins = (
     Pin<Gpio0, FunctionUart, PullNone>,
@@ -89,8 +89,6 @@ fn main() -> ! {
     // LED to one of the GPIO pins, and reference that pin here. Don't forget adding an appropriate resistor
     // in series with the LED.
 
-    let mut led_pin = pins.led.into_push_pull_output();
-
     let uart_pins: UartPins = (
         // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
         pins.gpio0.reconfigure::<FunctionUart, PullNone>(),
@@ -109,12 +107,39 @@ fn main() -> ! {
     // Write something to the UART on start-up so we can check the output pin
     // is wired correctly.
 
+    let mut i2c = I2C::i2c0(
+        pac.I2C0,
+        pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
+        pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
+        400.kHz(),
+        &mut pac.RESETS,
+        125_000_000.Hz(),
+    );
+
+    // Peripheral address of the PiicoDev RGB device
+    const RGB_ADDR: u8 = 0x1E;
+    // Address of the LED
+    const REG_CTRL: u8 = 0x03;
+    // Address of the brightness controller
+    const REG_BRIGHT: u8 = 0x06;
+    // Address of where to send LED colour colours
+    const REG_LED_VALS: u8 = 0x07;
+
+    // Turn the LED on
+    i2c.write(RGB_ADDR, &[REG_CTRL, 1]).unwrap();
+
     loop {
-        led_pin.set_high().unwrap();
-        delay.delay_ms(1000);
-        led_pin.set_low().unwrap();
-        delay.delay_ms(1000);
-        uart.write_full_blocking(b"uart_interrupt example started...\n");
+        for i in 0..10 {
+            // Set brightness
+            i2c.write(RGB_ADDR, &[REG_BRIGHT, i * 2]).unwrap();
+
+            // Set colours
+            let colours = [REG_LED_VALS, 255, 0, 0, 0, 255, 0, 0, 0, 255];
+            i2c.write(RGB_ADDR, &colours).unwrap();
+
+            uart.write_full_blocking(b"uart_interrupt example started...\n");
+            delay.delay_ms(200);
+        }
         // uart.read(&mut buffer).unwrap();
     }
 }
