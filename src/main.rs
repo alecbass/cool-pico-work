@@ -36,7 +36,7 @@ mod piicodev_vl53l1x;
 mod uart;
 
 use i2c::I2CHandler;
-use piicodev_rgb::PiicoDevRGB;
+use piicodev_rgb::piicodev_rgb::PiicoDevRGB;
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
 use uart::{Uart, UartPins};
 
