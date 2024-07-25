@@ -29,6 +29,8 @@ use bsp::hal::{
 use bsp::pac::UART0;
 use bsp::Pins;
 
+mod piicodev_rgb;
+
 type UartPins = (
     Pin<Gpio0, FunctionUart, PullNone>,
     Pin<Gpio1, FunctionUart, PullNone>,
