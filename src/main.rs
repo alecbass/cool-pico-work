@@ -132,25 +132,75 @@ fn main() -> ! {
     // Turn the LED on
     rgb.power_led(true).unwrap();
 
+    // Increases evey time the sensor reads close OR reads far consecutively
+    let mut last_is_close = false;
+    let mut same_reading_index = 0;
+
+    // How long to wait until the next reading
+    const NEAR_DELAY: u32 = 20;
+    const FAR_DELAY: u32 = 1000;
+
+    let mut next_delay;
+
+    const COLOUR_MAP: [(u8, u8, u8); 6] = [
+        (255, 0, 0),
+        (0, 255, 0),
+        (0, 0, 255),
+        (255, 255, 0),
+        (0, 255, 255),
+        (255, 0, 255),
+    ];
+
     loop {
         let reading = distance_sensor.read().unwrap();
 
         let mut uart = uart_cell.borrow_mut();
         let mut delay = delay_cell.borrow_mut();
 
-        writeln!(uart, "Distance: {}", reading).unwrap();
+        let is_close = reading < 100;
 
-        // Set brightness
-        rgb.set_brightness(10).unwrap();
+        // Have we gone from close to near, or from near to close?
+        let did_change = is_close != last_is_close;
 
-        // Set colours
-        rgb.set_pixel(0, (255, 0, 0));
-        rgb.set_pixel(1, (0, 255, 0));
-        rgb.set_pixel(2, (0, 0, 255));
+        if did_change {
+            same_reading_index = 0;
+        } else {
+            same_reading_index += 1;
+        }
+
+        last_is_close = is_close;
+
+        if is_close {
+            writeln!(uart, "GAMERS DETECTED!!!!! JULIA, KAFFY, SCRYBID").unwrap();
+            // Set brightness
+            rgb.set_brightness(20).unwrap();
+
+            let left = COLOUR_MAP[same_reading_index % 6];
+            let middle = COLOUR_MAP[(same_reading_index + 1) % 6];
+            let right = COLOUR_MAP[(same_reading_index + 2) % 6];
+
+            // Set colours
+            rgb.set_pixel(0, left);
+            rgb.set_pixel(1, middle);
+            rgb.set_pixel(2, right);
+
+            next_delay = NEAR_DELAY;
+        } else {
+            writeln!(uart, "No gaming detected in the vicinity...").unwrap();
+            // Set brightness
+            rgb.set_brightness(5).unwrap();
+
+            // Set colours
+            rgb.set_pixel(0, (255, 0, 0));
+            rgb.set_pixel(1, (0, 255, 0));
+            rgb.set_pixel(2, (0, 0, 255));
+
+            next_delay = FAR_DELAY;
+        }
+
         rgb.show().unwrap();
 
-        uart.write_full_blocking(b"Working on the distance sensor...\n");
-        delay.delay_ms(100);
+        delay.delay_ms(next_delay);
     }
 }
 
