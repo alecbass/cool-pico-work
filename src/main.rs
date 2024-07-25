@@ -4,7 +4,6 @@
 #![no_std]
 #![no_main]
 
-use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use core::fmt::Write;
 
