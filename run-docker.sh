@@ -1,7 +1,21 @@
 #!/usr/bin/env bash
 
-echo "Restarting udev - requiring sudo access"
-sudo service udev restart
-sudo udevadm trigger
+if [[ -z $(docker images | grep pico) ]]; then
+    echo "Image does not exist - building..."
+    docker build -t pico .
+fi
 
-docker run -it --privileged -v=/dev/bus/usb:/dev/bus/usb -v=/run/udev/control:/run/udev/control pico
+# echo "Restarting udev - requiring sudo access"
+# sudo service udev restart
+# sudo udevadm trigger
+
+docker run \
+    -it \
+    --privileged \
+    --net=host \
+    -v=/dev/bus/usb:/dev/bus/usb \
+    -v=/run/udev/control:/run/udev/control \
+    -v=./src:/app/src \
+    -v=./openocd.gdb:/app/openocd.gdb \
+    pico
+

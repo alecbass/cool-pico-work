@@ -5,23 +5,11 @@ ARG GROUPID=1000
 ARG USERID=1000
 ENV HOME=/app
 
+WORKDIR /app
+
 RUN useradd --uid ${USERID} ${USERNAME}
 
-WORKDIR /app
-ADD src /app/src
-ADD Cargo.toml /app/Cargo.toml
-ADD Cargo.lock /app/Cargo.lock
-ADD Embed.toml /app/Embed.toml
-ADD .cargo /app/.cargo
-ADD .vscode /app/.vscode
-ADD memory.x /app/memory.x
-ADD openocd.gdb /app/openocd.gdb
-ADD build.rs /app/build.rs
-ADD build.sh /app/build.sh
-ADD udev /app/udev
-
 FROM setup as hardware
-
 # Add hardware requirements
 
 RUN rustup target add thumbv6m-none-eabi
@@ -35,16 +23,38 @@ RUN ./setup-pico.sh
 ADD ./install-deps.sh /app/install-deps.sh
 RUN ./install-deps.sh
 
-FROM hardware as runtime
+FROM hardware as build
+
+# Add project
+ADD src /app/src
+ADD Cargo.toml /app/Cargo.toml
+ADD Cargo.lock /app/Cargo.lock
+ADD Embed.toml /app/Embed.toml
+ADD Makefile /app/Makefile
+ADD .cargo /app/.cargo
+ADD memory.x /app/memory.x
+ADD openocd.gdb /app/openocd.gdb
+ADD build.rs /app/build.rs
+ADD run-minicom.sh /app/run-minicom.sh
+ADD run-openocd.sh /app/run-openocd.sh
+
+# ADD build.sh /app/build.sh
+ADD udev /app/udev
+
+
+FROM build as runtime
 
 # Setup USB rules
 RUN udevadm control --reload-rules || echo "done"
 # RUN udevadm trigger
 
+RUN cargo build
 RUN chown -R ${USERNAME}:${USERNAME} /app
 USER ${USERNAME}
 
-RUN source .env
+EXPOSE 3333
+
+# RUN source .env
 
 # CMD [ "./build.sh" ]
 

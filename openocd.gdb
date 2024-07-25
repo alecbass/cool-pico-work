@@ -12,12 +12,17 @@ break DefaultHandler
 break HardFault
 
 # *try* stopping at the user entry point (it might be gone due to inlining)
-break main
+# break main
 
 monitor arm semihosting enable
+
+# Custom override: Not necessary? Copied from the VSCode template
+# monitor init
+# monitor reset init
+# monitor halt
 
 # load the application binary onto the Pico's flash
 load
 
 # start the process but immediately halt the processor
-stepi
+# stepi
