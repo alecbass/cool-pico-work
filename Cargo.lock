@@ -53,6 +53,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-nb",
  "fugit",
+ "libm",
  "panic-probe",
  "rp-pico",
 ]
@@ -289,6 +290,12 @@ checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
 dependencies = [
  "either",
 ]
+
+[[package]]
+name = "libm"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
 
 [[package]]
 name = "nb"

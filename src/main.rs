@@ -31,11 +31,14 @@ use bsp::hal::{
 use bsp::Pins;
 
 mod i2c;
+mod piicodev_buzzer;
 mod piicodev_rgb;
 mod piicodev_vl53l1x;
 mod uart;
 
 use i2c::I2CHandler;
+use piicodev_buzzer::notes::HARMONY;
+use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_rgb::piicodev_rgb::PiicoDevRGB;
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
 use uart::{Uart, UartPins};
@@ -131,6 +134,13 @@ fn main() -> ! {
     // Turn the LED on
     rgb.power_led(true).unwrap();
 
+    // Create the buzzer
+    let mut buzzer = PiicoDevBuzzer::new(&i2c_cell, &delay_cell);
+
+    // Initialise the buzzer
+    buzzer.init().unwrap();
+    buzzer.volume(BuzzerVolume::Low).unwrap();
+
     // Increases evey time the sensor reads close OR reads far consecutively
     let mut last_is_close = false;
     let mut same_reading_index = 0;
@@ -149,6 +159,10 @@ fn main() -> ! {
         (0, 255, 255),
         (255, 0, 255),
     ];
+
+    // Play repeated song
+    let mut note_index = 0;
+    let song = HARMONY;
 
     loop {
         let reading = distance_sensor.read().unwrap();
@@ -184,6 +198,19 @@ fn main() -> ! {
             rgb.set_pixel(2, right);
 
             next_delay = NEAR_DELAY;
+
+            // Play the next note of the song
+            let (note, duration) = HARMONY[note_index];
+            buzzer.tone(&note, duration).unwrap();
+
+            note_index += 1;
+
+            let is_at_end_of_song = note_index >= song.len();
+
+            if is_at_end_of_song {
+                // Restart the song
+                note_index = 0;
+            }
         } else {
             writeln!(uart, "No gaming detected in the vicinity...").unwrap();
             // Set brightness

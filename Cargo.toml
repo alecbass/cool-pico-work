@@ -20,7 +20,8 @@ rp-pico = "0.9.0"
 fugit = "0.3.7"
 
 # For mathematics
-# libm = "0.2.6"
+libm = "0.2.8"
+
 # cyw43 = { git = "https://github.com/alecbass/embassy.git", branch = "remove-boot2-writing", features = [
 #     "defmt",
 #     "firmware-logs",
