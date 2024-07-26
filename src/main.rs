@@ -4,13 +4,16 @@
 #![no_std]
 #![no_main]
 
-use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use core::fmt::Write;
 
 use cortex_m::delay::Delay;
 use defmt::*;
 use defmt_rtt as _;
+use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder};
+use embedded_graphics::pixelcolor::{BinaryColor, Rgb565};
+use embedded_graphics::prelude::*;
+use embedded_graphics::text::{Alignment, Baseline, Text};
 use fugit::RateExtU32;
 use panic_probe as _;
 
@@ -30,11 +33,13 @@ use bsp::hal::{
     watchdog::Watchdog,
 };
 use bsp::Pins;
+use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 
 mod i2c;
 mod piicodev_bme280;
 mod piicodev_buzzer;
 mod piicodev_rgb;
+mod piicodev_ssd1306;
 mod piicodev_vl53l1x;
 mod uart;
 
@@ -43,6 +48,7 @@ use piicodev_bme280::piicodev_bme280::PiicoDevBME280;
 use piicodev_buzzer::notes::HARMONY;
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_rgb::piicodev_rgb::PiicoDevRGB;
+use piicodev_ssd1306::{OLEDColour, PiicoDevSSD1306};
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
 use uart::{Uart, UartPins};
 
@@ -123,6 +129,58 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
+    let interface = I2CDisplayInterface::new(i2c);
+
+    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+        .into_buffered_graphics_mode();
+    display.init().unwrap();
+
+    let text_style = MonoTextStyleBuilder::new()
+        .font(&FONT_6X10)
+        .text_color(BinaryColor::On)
+        .build();
+
+    // Can't draw with this for some reason
+    let red_style = MonoTextStyleBuilder::new()
+        .font(&FONT_6X10)
+        .text_color(Rgb565::RED)
+        .build();
+
+    Text::with_alignment(
+        "80% of boys have",
+        Point::new(64, 8),
+        text_style,
+        Alignment::Center,
+    )
+    .draw(&mut display)
+    .unwrap();
+
+    Text::with_alignment(
+        "girlfriends",
+        Point::new(64, 24),
+        text_style,
+        Alignment::Center,
+    )
+    .draw(&mut display)
+    .unwrap();
+
+    Text::with_alignment(
+        "rest 20% are having",
+        Point::new(64, 40),
+        text_style,
+        Alignment::Center,
+    )
+    .draw(&mut display)
+    .unwrap();
+
+    Text::with_alignment("a brain", Point::new(64, 56), text_style, Alignment::Center)
+        .draw(&mut display)
+        .unwrap();
+
+    display.flush().unwrap();
+
+    loop {}
+
     // Turn IO devices into shared pointers
     let i2c_cell = RefCell::new(i2c);
     let uart_cell = RefCell::new(uart);
@@ -171,6 +229,17 @@ fn main() -> ! {
     let mut note_index = 0;
     let song = HARMONY;
 
+    // Set up the OLED display
+    let mut oled = PiicoDevSSD1306::new(&i2c_cell);
+    oled.init().unwrap();
+    oled.fill(OLEDColour::WHITE);
+
+    for i in 64..0 {
+        oled.pixel(i, i, OLEDColour::BLACK);
+    }
+
+    oled.show().unwrap();
+
     loop {
         let reading = distance_sensor.read().unwrap();
 
@@ -207,7 +276,7 @@ fn main() -> ! {
 
             // Play the next note of the song
             let (note, duration) = HARMONY[note_index];
-            buzzer.tone(&note, duration).unwrap();
+            // buzzer.tone(&note, duration).unwrap();
 
             note_index += 1;
 

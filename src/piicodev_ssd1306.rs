@@ -1,8 +1,11 @@
-use super::piicodev_unified::I2CUnifiedMachine;
-use crate::piicodev_unified::{HardwareArgs, I2CBase};
-use defmt::*;
+use core::cell::RefCell;
+
+use embedded_hal::i2c::I2c;
 use libm::{cosf, sinf};
-use rp_pico::hal::i2c;
+use rp_pico::hal::i2c::Error;
+use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
+
+use crate::i2c::I2CHandler;
 
 const BASE_ADDR: u8 = 0x3C;
 const _SET_CONTRAST: u8 = 0x81;
@@ -44,14 +47,25 @@ impl Into<u8> for OLEDColour {
     }
 }
 
-pub struct PiicoDevSSD1306<'a> {
+pub struct PiicoDevSSD1306<'i2c> {
     addr: u8,
-    pub i2c: &'a mut I2CUnifiedMachine,
+    i2c: &'i2c RefCell<I2CHandler>,
     buffer: [u8; BUFFER_SIZE],
 }
 
-impl<'a> PiicoDevSSD1306<'a> {
-    fn init_display(&mut self) {
+impl<'i2c> PiicoDevSSD1306<'i2c> {
+    pub fn new(i2c: &'i2c RefCell<I2CHandler>) -> Self {
+        Self {
+            addr: BASE_ADDR,
+            i2c,
+            buffer: [0; BUFFER_SIZE],
+        }
+    }
+
+    /// Initialise the display
+    pub fn init(&mut self) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
         for cmd in [
             _SET_DISP, // display off
             // address setting
@@ -86,72 +100,88 @@ impl<'a> PiicoDevSSD1306<'a> {
             0x14,
             _SET_DISP | 0x01, // display on
         ] {
-            self.write_cmd(cmd).unwrap();
+            self.write_cmd(cmd, &mut i2c)?;
         }
+
+        Ok(())
     }
 
-    pub fn new(i2c: &'a mut I2CUnifiedMachine) -> Self {
-        let mut oled = Self {
-            addr: BASE_ADDR,
-            i2c,
-            buffer: [0; BUFFER_SIZE],
-        };
-        oled.init_display();
-        oled
+    fn write_cmd(&mut self, command: u8, i2c: &mut I2CHandler) -> Result<(), Error> {
+        i2c.write(self.addr, &[0x80, command])
     }
 
-    pub(self) fn write_cmd(&mut self, command: u8) -> Result<(), i2c::Error> {
-        debug!("Writing cmd {}", command);
-        self.i2c.write(self.addr, &[0x80, command])
-    }
+    pub fn show(&mut self) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
 
-    pub fn show(&mut self) -> Result<(), i2c::Error> {
         let x0 = 0;
         let x1 = WIDTH - 1;
-        self.write_cmd(_SET_COL_ADDR)?;
-        self.write_cmd(x0)?;
-        self.write_cmd(x1)?;
-        self.write_cmd(_SET_PAGE_ADDR)?;
-        self.write_cmd(0)?;
-        self.write_cmd(PAGES - 1)?;
+        self.write_cmd(_SET_COL_ADDR, &mut i2c)?;
+        self.write_cmd(x0, &mut i2c)?;
+        self.write_cmd(x1, &mut i2c)?;
+        self.write_cmd(_SET_PAGE_ADDR, &mut i2c)?;
+        self.write_cmd(0, &mut i2c)?;
+        self.write_cmd(PAGES - 1, &mut i2c)?;
 
         // write_data replacement
         self.buffer[0] = 0x40;
-        self.i2c.write(self.addr, &self.buffer)
+        i2c.write(self.addr, &self.buffer)
     }
 
-    pub fn power_off(&mut self) -> Result<(), i2c::Error> {
-        self.write_cmd(_SET_DISP)
+    pub fn power_off(&mut self) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
+        self.write_cmd(_SET_DISP, &mut i2c)
     }
 
-    pub fn power_on(&mut self) -> Result<(), i2c::Error> {
-        self.write_cmd(_SET_DISP | 0x01)
+    pub fn power_on(&mut self) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
+        self.write_cmd(_SET_DISP | 0x01, &mut i2c)
     }
 
-    pub fn set_contrast(&mut self, contrast: u8) -> Result<(), i2c::Error> {
-        self.write_cmd(_SET_CONTRAST)?;
-        self.write_cmd(contrast)
+    pub fn set_contrast(&mut self, contrast: u8) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
+        self.write_cmd(_SET_CONTRAST, &mut i2c)?;
+        self.write_cmd(contrast, &mut i2c)
     }
 
-    pub fn invert(&mut self, invert: u8) -> Result<(), i2c::Error> {
-        self.write_cmd(_SET_NORM_INV | (invert & 1))
+    pub fn invert(&mut self, invert: u8) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
+        self.write_cmd(_SET_NORM_INV | (invert & 1), &mut i2c)
     }
 
-    pub fn rotate(&mut self, rotate: u8) -> Result<(), i2c::Error> {
-        self.write_cmd(_SET_COM_OUT_DIR | ((rotate & 1) << 3))?;
-        self.write_cmd(_SET_SEG_REMAP | (rotate & 1))
+    pub fn rotate(&mut self, rotate: u8) -> Result<(), Error> {
+        let mut i2c = self.i2c.borrow_mut();
+
+        self.write_cmd(_SET_COM_OUT_DIR | ((rotate & 1) << 3), &mut i2c)?;
+        self.write_cmd(_SET_SEG_REMAP | (rotate & 1), &mut i2c)
     }
 
     pub fn pixel(&mut self, x: u8, y: u8, colour: OLEDColour) {
         fn set_pixel(buffer: &mut [u8], stride: u8, x: u8, y: u8, colour: OLEDColour) {
-            let x_coord: u32 = x as u32;
-            let y_coord: u32 = y as u32;
-            let index: usize = ((y_coord >> 3) * stride as u32 + x_coord) as usize;
-            let offset: u32 = y_coord & 0x07;
+            let x_coord = x & (WIDTH - 1);
+            let y_coord = y & (HEIGHT - 1);
+            let page = y / 8; // page, shift_page = divmod(y, 8)
+            let shift_page = 0;
 
-            let new: u8 = (buffer[index] & !(0x01 << offset))
-                | ((u8::from(colour != OLEDColour::BLACK)) << offset);
-            buffer[index] = new;
+            let index = x + page * 128;
+            let index = index as usize;
+
+            // let index = ((y_coord >> 3) * stride as u32 + x_coord) as usize;
+            // let offset = y_coord & 0x07;
+            // let b = match colour {
+            //     OLEDColour::WHITE => buffer[index] | (1 << shift_page),
+            //     OLEDColour::BLACK => buffer[index] & !(1 << shift_page),
+            // };
+            //
+            // // pack_into(">B", self.buffer, ind, b)
+            //
+            // let new = (buffer[index] & !(0x01 << offset))
+            //     | ((u8::from(colour != OLEDColour::BLACK)) << offset);
+            //
+            // buffer[index] = new;
         }
 
         // let index: usize = (x + y) as usize;
@@ -170,29 +200,28 @@ impl<'a> PiicoDevSSD1306<'a> {
     pub fn fill(&mut self, colour: OLEDColour) {
         const FULL_HEIGHT: u8 = 128;
         const FULL_WIDTH: u8 = 255;
+
         self.fill_rect(FULL_HEIGHT, FULL_WIDTH, 0, 0, colour);
     }
 
     pub fn arc(&mut self, x: u8, y: u8, r: u8, start_angle: u8, end_angle: u8) {
-        let t: u8 = 0;
+        let t = 0;
 
-        let test: u8 = r * (1 - t) - 1;
-        debug!("Hello {}", test);
-        let x: f32 = x as f32;
-        let y: f32 = y as f32;
+        let test = r * (1 - t) - 1;
+        let x = x as f32;
+        let y = y as f32;
 
-        debug!("Hello {}", test);
         for i in (r * (1 - t) - 1)..r {
             for ta in start_angle..end_angle {
-                let x: u8 = (i as f32 * (cosf((ta as f64).to_radians() as f32) + x)) as u8;
-                let y: u8 = (i as f32 * (sinf((ta as f64).to_radians() as f32) + y)) as u8;
+                let x = (i as f32 * (cosf((ta as f64).to_radians() as f32) + x)) as u8;
+                let y = (i as f32 * (sinf((ta as f64).to_radians() as f32) + y)) as u8;
                 self.pixel(x, y, OLEDColour::WHITE);
             }
         }
     }
 
     pub fn circ(&self, x: u8, y: u8, r: u8) {
-        let t: u8 = 1;
-        let c: u8 = 1;
+        let t = 1 as u8;
+        let c = 1 as u8;
     }
 }

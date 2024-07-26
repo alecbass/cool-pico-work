@@ -22,6 +22,10 @@ fugit = "0.3.7"
 # For mathematics
 libm = "0.2.8"
 
+# For OLED display
+embedded-graphics = "0.8.1"
+ssd1306 = "0.8.4"
+
 # cyw43 = { git = "https://github.com/alecbass/embassy.git", branch = "remove-boot2-writing", features = [
 #     "defmt",
 #     "firmware-logs",
