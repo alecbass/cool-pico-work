@@ -4,6 +4,7 @@
 #![no_std]
 #![no_main]
 
+use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use core::fmt::Write;
 
@@ -31,12 +32,14 @@ use bsp::hal::{
 use bsp::Pins;
 
 mod i2c;
+mod piicodev_bme280;
 mod piicodev_buzzer;
 mod piicodev_rgb;
 mod piicodev_vl53l1x;
 mod uart;
 
 use i2c::I2CHandler;
+use piicodev_bme280::piicodev_bme280::PiicoDevBME280;
 use piicodev_buzzer::notes::HARMONY;
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
 use piicodev_rgb::piicodev_rgb::PiicoDevRGB;
@@ -141,6 +144,10 @@ fn main() -> ! {
     buzzer.init().unwrap();
     buzzer.volume(BuzzerVolume::Low).unwrap();
 
+    // Initialise the temperature sensor
+    let mut temperature_sensor = PiicoDevBME280::new(&i2c_cell, &delay_cell);
+    temperature_sensor.init().unwrap();
+
     // Increases evey time the sensor reads close OR reads far consecutively
     let mut last_is_close = false;
     let mut same_reading_index = 0;
@@ -168,7 +175,6 @@ fn main() -> ! {
         let reading = distance_sensor.read().unwrap();
 
         let mut uart = uart_cell.borrow_mut();
-        let mut delay = delay_cell.borrow_mut();
 
         let is_close = reading < 100;
 
@@ -226,7 +232,19 @@ fn main() -> ! {
 
         rgb.show().unwrap();
 
-        delay.delay_ms(next_delay);
+        let readings = temperature_sensor.values().unwrap();
+        let altitude = temperature_sensor.altitude(None).unwrap();
+        writeln!(
+            uart,
+            "Temperature: {} Pressure: {} Humidity: {} Altitude: {}",
+            readings.temperature, readings.pressure, readings.humidity, altitude
+        )
+        .unwrap();
+
+        {
+            let mut delay = delay_cell.borrow_mut();
+            delay.delay_ms(next_delay);
+        }
     }
 }
 
