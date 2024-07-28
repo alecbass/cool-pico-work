@@ -1,17 +1,22 @@
 mod constants;
 mod reading;
 
+use core::fmt::Write;
+
 use bsp::hal::i2c::Error;
+use cortex_m::delay::Delay;
 use embedded_hal::i2c::I2c;
 use rp_pico as bsp;
 
 use crate::{
     i2c::I2CHandler,
     piicodev_qmc6310::constants::{ADDRESS_XOUT, ADDRESS_YOUT, ADDRESS_ZOUT},
+    uart::Uart,
 };
 
 use self::constants::{
-    ADDRESS_CONTROL1, ADDRESS_SIGN, ADDRESS_STATUS, BIT_ODR, BIT_OSR1, BIT_OSR2, I2C_ADDRESS,
+    ADDRESS_CONTROL1, ADDRESS_CONTROL2, ADDRESS_SIGN, ADDRESS_STATUS, BIT_ODR, BIT_OSR1, BIT_OSR2,
+    BIT_RANGE, I2C_ADDRESS,
 };
 use self::reading::MagnetometerReading;
 
@@ -66,19 +71,23 @@ impl Into<f32> for MicroteslaRange {
     }
 }
 
-fn read_bit(x: u8, n: u8) -> u8 {
-    let is_n_not_zero = (n != 0) as u8;
-    x & 1 << is_n_not_zero
+/// Reads an individual bit from a byte
+fn read_bit(byte: u8, bit_index: u8) -> u8 {
+    // Copied from https://users.rust-lang.org/t/extracting-bits-from-bytes/77110/3
+    (byte >> bit_index) & 1
 }
 
+/// Sets an individual bit of a byte
 fn set_bit(x: u8, n: u8) -> u8 {
     x | (1 << n)
 }
 
+/// Sets an individual bit of a byte to 0
 fn clear_bit(x: u8, n: u8) -> u8 {
     x & !(1 << n)
 }
 
+/// Writes a bit to a byte
 fn write_bit(x: u8, n: u8, b: u8) -> u8 {
     if b == 0 {
         return clear_bit(x, n);
@@ -124,26 +133,25 @@ pub struct PiicoDevQMC6310 {
     x_offset: u16,
     y_offset: u16,
     z_offset: u16,
-    declination: u8,
+    declination: f32,
     data: [u8; 64], // Meant to be a Python dictionary
 }
 
 impl PiicoDevQMC6310 {
-    pub fn new(addr: Option<u8>, range: Option<GaussRange>) -> Self {
+    pub fn new(addr: Option<u8>, range: Option<GaussRange>, declination: f32) -> Self {
         let addr = addr.unwrap_or(I2C_ADDRESS);
         let odr = 3;
+        let osr1 = 0;
+        let osr2 = 3;
         let calibration_file = "calibration.cal";
         let suppress_warnings = false;
         let cr1 = 0x00;
         let cr2 = 0x00;
-        let osr1 = 0;
-        let osr2 = 3;
         let range = range.unwrap_or(GaussRange::Gauss3000);
         let sensitivity = MicroteslaRange::from(&range);
         let x_offset = 0;
         let y_offset = 0;
         let z_offset = 0;
-        let declination = 0;
         let data = [0; 64];
 
         Self {
@@ -177,31 +185,28 @@ impl PiicoDevQMC6310 {
         self.set_oversampling_rate(self.osr2, i2c)?;
         self.set_range(self.range, i2c)?;
         self.set_sign(sign, i2c)?;
+        self.load_calibration();
 
         Ok(())
     }
 
     fn set_mode(&mut self, mode: u8, i2c: &mut I2CHandler) -> Result<(), Error> {
         self.cr1 = write_crumb(self.cr1, 0, mode);
-        i2c.write(self.addr, &[self.cr1])
+        i2c.write(self.addr, &[ADDRESS_CONTROL1, self.cr1])
     }
 
     fn set_output_data_rate(&mut self, odr: u8, i2c: &mut I2CHandler) -> Result<(), Error> {
         self.cr1 = write_crumb(self.cr1, BIT_ODR, odr);
-
-        // self.i2c.writeto_mem(self.addr, _ADDRESS_CONTROL1, bytes([self._CR1]))
         i2c.write(self.addr, &[ADDRESS_CONTROL1, self.cr1])
     }
 
     fn set_oversampling_ratio(&mut self, osr1: u8, i2c: &mut I2CHandler) -> Result<(), Error> {
         self.cr1 = write_crumb(self.cr1, BIT_OSR1, osr1);
-        // self.i2c.writeto_mem(self.addr, _ADDRESS_CONTROL1, bytes([self._CR1]))
         i2c.write(self.addr, &[ADDRESS_CONTROL1, self.cr1])
     }
 
     fn set_oversampling_rate(&mut self, osr2: u8, i2c: &mut I2CHandler) -> Result<(), Error> {
         self.cr1 = write_crumb(self.cr1, BIT_OSR2, osr2);
-        // self.i2c.writeto_mem(self.addr, _ADDRESS_CONTROL1, bytes([self._CR1]))
         i2c.write(self.addr, &[ADDRESS_CONTROL1, self.cr1])
     }
 
@@ -215,9 +220,9 @@ impl PiicoDevQMC6310 {
 
         self.range = range;
         self.sensitivity = MicroteslaRange::from(&range);
-        self.cr2 = write_crumb(self.cr2, BIT_OSR2, range_bit);
+        self.cr2 = write_crumb(self.cr2, BIT_RANGE, range_bit);
 
-        i2c.write(self.addr, &[ADDRESS_CONTROL1, self.cr2])
+        i2c.write(self.addr, &[ADDRESS_CONTROL2, self.cr2])
     }
 
     fn set_sign(&mut self, sign: u8, i2c: &mut I2CHandler) -> Result<(), Error> {
@@ -231,16 +236,27 @@ impl PiicoDevQMC6310 {
         Ok(buffer)
     }
 
-    fn get_status_ready(&self, status: u8) -> u8 {
-        read_bit(status, 0)
+    fn get_status_ready(&self, status: u8) -> bool {
+        read_bit(status, 0) != 0
     }
 
-    fn get_status_overflow(&self, status: u8) -> u8 {
-        read_bit(status, 1)
+    fn get_status_overflow(&self, status: u8) -> bool {
+        read_bit(status, 1) != 0
     }
 
     fn read(&mut self, raw: bool, i2c: &mut I2CHandler) -> Result<(f32, f32, f32), Error> {
-        let nan = (f32::NAN, f32::NAN, f32::NAN);
+        fn calculate_value(raw_value: u16, offset: u16) -> f32 {
+            let mut value = raw_value as f32;
+            let offset = offset as f32;
+
+            if raw_value >= 0x8000 {
+                value = !((65535 - raw_value) + 1) as f32;
+            }
+
+            value - offset
+        }
+
+        const NAN: (f32, f32, f32) = (f32::NAN, f32::NAN, f32::NAN);
 
         // Create a buffer to hold one bit
         let mut buffer = [0; 1];
@@ -248,50 +264,41 @@ impl PiicoDevQMC6310 {
         let status_result = i2c.write_read(self.addr, &[ADDRESS_STATUS], &mut buffer);
 
         if status_result.is_err() {
-            return Ok(nan);
+            return Ok(NAN);
         }
 
         let status = buffer[0];
 
+        let is_status_ready = self.get_status_ready(status);
+
+        if !is_status_ready {
+            return Ok(NAN);
+        }
+
         // Re-initialise the buffer to hold two bits
         let mut buffer = [0; 2];
 
-        let is_status_ready = self.get_status_ready(status) != 0;
-
-        if !is_status_ready {
-            return Ok(nan);
-        }
-
         // Read x
         i2c.write_read(self.addr, &[ADDRESS_XOUT], &mut buffer)?;
-        let x_from_buffer = u16::from_le_bytes([buffer[0], buffer[1]]);
+        let x_from_buffer = u16::from_le_bytes(buffer);
 
         // Read y
         i2c.write_read(self.addr, &[ADDRESS_YOUT], &mut buffer)?;
-        let y_from_buffer = u16::from_le_bytes([buffer[0], buffer[1]]);
+        let y_from_buffer = u16::from_le_bytes(buffer);
 
         // Read z
         i2c.write_read(self.addr, &[ADDRESS_ZOUT], &mut buffer)?;
-        let z_from_buffer = u16::from_le_bytes([buffer[0], buffer[1]]);
+        let z_from_buffer = u16::from_le_bytes(buffer);
 
-        let is_status_overflow = self.get_status_overflow(status) != 0;
+        let is_status_overflow = self.get_status_overflow(status);
 
         if is_status_overflow {
-            return Ok(nan);
+            return Ok(NAN);
         }
 
-        fn calculate_value(raw_value: u16, offset: u16) -> u16 {
-            let mut value = raw_value;
-            if value >= 0x8000 {
-                value = !((65535 - raw_value) + 1);
-            }
-
-            value - offset
-        }
-
-        let x = calculate_value(x_from_buffer, self.x_offset) as f32;
-        let y = calculate_value(y_from_buffer, self.y_offset) as f32;
-        let z = calculate_value(z_from_buffer, self.z_offset) as f32;
+        let x = calculate_value(x_from_buffer, self.x_offset);
+        let y = calculate_value(y_from_buffer, self.y_offset);
+        let z = calculate_value(z_from_buffer, self.z_offset);
 
         let sensitivity: f32 = self.sensitivity.into();
 
@@ -310,12 +317,18 @@ impl PiicoDevQMC6310 {
         Ok(sample)
     }
 
-    pub fn read_polar(&mut self, i2c: &mut I2CHandler) -> Result<MagnetometerReading, Error> {
+    pub fn read_polar(
+        &mut self,
+        i2c: &mut I2CHandler,
+        uart: &mut Uart,
+    ) -> Result<MagnetometerReading, Error> {
         const PI: f32 = 3.14159265358979323846;
 
         let (x, y, z) = self.read(false, i2c)?;
+        // writeln!(uart, "{} {} {}", x, y, z).unwrap();
 
-        let angle = (libm::atan2f(x, y) / PI) * 180.0 + self.declination as f32;
+        let angle = (libm::atan2f(x, -y) / PI) * 180.0 + self.declination;
+        // writeln!(uart, "{}", angle).unwrap();
         let angle = convert_angle_to_positive(angle);
 
         let magnitude = libm::sqrtf(x * x + y * y + z * z);
@@ -329,6 +342,141 @@ impl PiicoDevQMC6310 {
 
         Ok(reading)
     }
+
+    pub fn calibrate(
+        &mut self,
+        enable_logging: bool,
+        i2c: &mut I2CHandler,
+        uart: &mut Uart,
+        delay: &mut Delay,
+    ) -> Result<(), Error> {
+        self.set_output_data_rate(3, i2c)?;
+
+        let mut x_min = 65535.0;
+        let mut x_max = -65535.0;
+        let mut y_min = 65535.0;
+        let mut y_max = -65535.0;
+        let mut z_min = 65535.0;
+        let mut z_max = -65535.0;
+
+        // log = ''
+        writeln!(
+            uart,
+            "*** Calibrating.\n    Slowly rotate your sensor until the bar is full"
+        )
+        .unwrap();
+        write!(uart, "[          ]").unwrap();
+        let range = 1000;
+        let mut i = 0;
+
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut z = 0.0;
+
+        // EMA filter weight
+        let a = 0.5;
+
+        while i < range {
+            i += 1;
+            delay.delay_ms(5);
+
+            let (polar, gauss, magnitude) = self.read(true, i2c)?;
+
+            x = a * polar + (1.0 - a) * x;
+            y = a * gauss + (1.0 - a) * y;
+            z = a * magnitude + (1.0 - a) * z;
+
+            if x < x_min {
+                x_min = x;
+                i = 0;
+            }
+
+            if x > x_max {
+                x_max = x;
+                i = 0;
+            }
+
+            if y < y_min {
+                y_min = y;
+                i = 0;
+            }
+
+            if y > y_max {
+                y_max = y;
+                i = 0;
+            }
+
+            if z < z_min {
+                z_min = z;
+                i = 0;
+            }
+
+            if z > z_max {
+                z_max = z;
+                i = 0;
+            }
+
+            let j = 10 * i / range;
+
+            write!(uart, "\015[").unwrap();
+
+            for _ in 0..j {
+                write!(uart, "*").unwrap();
+            }
+
+            for _ in 0..10 - j {
+                write!(uart, " ").unwrap();
+            }
+
+            writeln!(uart, "]").unwrap();
+
+            if enable_logging {
+                let _ = writeln!(uart, "x: {}, y: {}, z: {}", x, y, z);
+            }
+        }
+
+        // set the output data rate back to the user selected rate
+        self.set_output_data_rate(self.odr, i2c)?;
+
+        let x_offset = (x_max + x_min) as u16 / 2;
+        let y_offset = (y_max + y_min) as u16 / 2;
+        let z_offset = (z_max + z_min) as u16 / 2;
+
+        write!(
+            uart,
+            "x_min:\n{}\nx_max:\n{}\ny_min:\n{}\ny_max:\n{}\nz_min:\n{}\nz_max:\n{}\nx_offset:\n{}\ny_offset:\n{}\nz_offset:\n{}",
+            x_min, x_max, y_min, y_max, z_min, z_max, x_offset, y_offset, z_offset
+        )
+        .unwrap();
+
+        // f = open(self.calibrationFile, "w")
+        // f.write('x_min:\n' + str(x_min) + '\nx_max:\n' + str(x_max) + '\ny_min:\n' + str(y_min) + '\ny_max:\n' + str(y_max) + '\nz_min\n' + str(z_min) + '\nz_max:\n' + str(z_max) + '\nx_offset:\n')
+        // f.write(str(self.x_offset) + '\ny_offset:\n' + str(self.y_offset) + '\nz_offset:\n' + str(self.z_offset))
+        // f.close()
+        // if enable_logging:
+        //     flog = open("calibration.log", "w")
+        //     flog.write(log)
+        //     flog.close
+
+        Ok(())
+    }
+
+    fn load_calibration(&mut self) {
+        // Harcoded from a previous test
+        // let x_min = 0.9501879;
+        // let x_max = 65525.46;
+        // let y_min = 3.8511074;
+        // let y_max = 65533.85;
+        // let z_min = 2.381914;
+        // let z_max = 65522.266;
+        const X_OFFSET: u16 = 32717;
+        const Y_OFFSET: u16 = 32765;
+        const Z_OFFSET: u16 = 32714;
+
+        self.x_offset = X_OFFSET;
+        self.y_offset = Y_OFFSET;
+        self.z_offset = Z_OFFSET;
+    }
 }
 
 //     def readMagnitude(self):
@@ -337,57 +485,9 @@ impl PiicoDevQMC6310 {
 //     def readHeading(self):
 //         return self.readPolar()['polar']
 //
-//     def setDeclination(self, dec):
-//         self.declination = dec
+
 //
-//     def calibrate(self, enable_logging=False):
-//         try:
-//             self.setOutputDataRate(3)
-//         except Exception as e:
-//             print(i2c_err_str.format(self.addr))
-//             raise e
-//         x_min = 65535
-//         x_max = -65535
-//         y_min = 65535
-//         y_max = -65535
-//         z_min = 65535
-//         z_max = -65535
-//         log = ''
-//         print('*** Calibrating.\n    Slowly rotate your sensor until the bar is full')
-//         print('[          ]', end='')
-//         range = 1000
-//         i = 0
-//         x=0;y=0;z=0;
-//         a=0.5 # EMA filter weight
-//         while i < range:
-//             i += 1
-//             sleep_ms(5)
-//             d = self.read(raw=True)
-//             x = a*d['x'] + (1-a)*x # EMA filter
-//             y = a*d['y'] + (1-a)*y
-//             z = a*d['z'] + (1-a)*z
-//             if x < x_min: x_min = x; i=0
-//             if x > x_max: x_max = x; i=0
-//             if y < y_min: y_min = y; i=0
-//             if y > y_max: y_max = y; i=0
-//             if z < z_min: z_min = z; i=0
-//             if z > z_max: z_max = z; i=0
-//             j = round(10*i/range);
-//             print( '\015[' + int(j)*'*' + int(10-j)*' ' + ']', end='') # print a progress bar
-//             if enable_logging:
-//                 log = log + (str(d['x']) + ',' + str(d['y']) + ',' + str(d['z']) + '\n')
-//         self.setOutputDataRate(self.odr) # set the output data rate back to the user selected rate
-//         self.x_offset = (x_max + x_min) / 2
-//         self.y_offset = (y_max + y_min) / 2
-//         self.z_offset = (z_max + z_min) / 2
-//         f = open(self.calibrationFile, "w")
-//         f.write('x_min:\n' + str(x_min) + '\nx_max:\n' + str(x_max) + '\ny_min:\n' + str(y_min) + '\ny_max:\n' + str(y_max) + '\nz_min\n' + str(z_min) + '\nz_max:\n' + str(z_max) + '\nx_offset:\n')
-//         f.write(str(self.x_offset) + '\ny_offset:\n' + str(self.y_offset) + '\nz_offset:\n' + str(self.z_offset))
-//         f.close()
-//         if enable_logging:
-//             flog = open("calibration.log", "w")
-//             flog.write(log)
-//             flog.close
+
 //
 //     def loadCalibration(self):
 //         try:

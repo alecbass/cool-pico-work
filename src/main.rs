@@ -49,7 +49,7 @@ use i2c::I2CHandler;
 use piicodev_bme280::piicodev_bme280::PiicoDevBME280;
 use piicodev_buzzer::notes::HARMONY;
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
-use piicodev_qmc6310::PiicoDevQMC6310;
+use piicodev_qmc6310::{GaussRange, PiicoDevQMC6310};
 use piicodev_rgb::piicodev_rgb::PiicoDevRGB;
 use piicodev_ssd1306::{OLEDColour, PiicoDevSSD1306};
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
@@ -85,7 +85,7 @@ fn main() -> ! {
     .unwrap();
 
     // Lets us wait for fixed periods of time
-    let delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     // Set the pins to their default state
     let pins = Pins::new(
@@ -132,19 +132,33 @@ fn main() -> ! {
         125_000_000.Hz(),
     );
 
-    let mut magnetometer = PiicoDevQMC6310::new(None, None);
+    let declination = 12.64; // Brisbane
+    let mut magnetometer = PiicoDevQMC6310::new(None, Some(GaussRange::Gauss1200), declination);
 
-    let reading = magnetometer.read_polar(&mut i2c);
+    if magnetometer.init(&mut i2c).is_err() {
+        writeln!(uart, "Failed to initialise magnetometer").unwrap();
+    }
+    delay.delay_ms(5);
 
-    if let Ok(reading) = reading {
-        writeln!(
-            uart,
-            "Polar: {}, Gauss: {}, uT: {}",
-            reading.polar, reading.gauss, reading.magnitude
-        )
-        .unwrap();
-    } else {
-        writeln!(uart, "Failed to read magnetometer").unwrap();
+    delay.delay_ms(1000);
+
+    // if magnetometer
+    //     .calibrate(false, &mut i2c, &mut uart, &mut delay)
+    //     .is_err()
+    // {
+    //     writeln!(uart, "Failed to calibrate magnetometer").unwrap();
+    // }
+
+    loop {
+        let reading = magnetometer.read_polar(&mut i2c, &mut uart);
+
+        if let Ok(reading) = reading {
+            writeln!(uart, "Polar: {}°", reading.polar as u16).unwrap();
+        } else {
+            writeln!(uart, "Failed to read magnetometer").unwrap();
+        }
+
+        delay.delay_ms(100);
     }
 
     let interface = I2CDisplayInterface::new(i2c);
