@@ -11,10 +11,10 @@ use cortex_m::delay::Delay;
 use defmt::*;
 use defmt_rtt as _;
 use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder};
-use embedded_graphics::pixelcolor::{BinaryColor, Rgb565};
+use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
-use embedded_graphics::text::{Alignment, Baseline, Text};
+use embedded_graphics::text::{Alignment, Text};
 use fugit::RateExtU32;
 use panic_probe as _;
 
@@ -39,6 +39,7 @@ use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 mod i2c;
 mod piicodev_bme280;
 mod piicodev_buzzer;
+mod piicodev_qmc6310;
 mod piicodev_rgb;
 mod piicodev_ssd1306;
 mod piicodev_vl53l1x;
@@ -48,6 +49,7 @@ use i2c::I2CHandler;
 use piicodev_bme280::piicodev_bme280::PiicoDevBME280;
 use piicodev_buzzer::notes::HARMONY;
 use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
+use piicodev_qmc6310::PiicoDevQMC6310;
 use piicodev_rgb::piicodev_rgb::PiicoDevRGB;
 use piicodev_ssd1306::{OLEDColour, PiicoDevSSD1306};
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
@@ -111,7 +113,7 @@ fn main() -> ! {
     );
 
     // Make a UART on the given pins
-    let uart: Uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
+    let mut uart: Uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(
             UartConfig::new(9600.Hz(), DataBits::Eight, None, StopBits::One),
             clocks.peripheral_clock.freq(),
@@ -121,7 +123,7 @@ fn main() -> ! {
     // Write something to the UART on start-up so we can check the output pin
     // is wired correctly.
 
-    let i2c: I2CHandler = I2C::i2c0(
+    let mut i2c: I2CHandler = I2C::i2c0(
         pac.I2C0,
         pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
         pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
@@ -129,6 +131,21 @@ fn main() -> ! {
         &mut pac.RESETS,
         125_000_000.Hz(),
     );
+
+    let mut magnetometer = PiicoDevQMC6310::new(None, None);
+
+    let reading = magnetometer.read_polar(&mut i2c);
+
+    if let Ok(reading) = reading {
+        writeln!(
+            uart,
+            "Polar: {}, Gauss: {}, uT: {}",
+            reading.polar, reading.gauss, reading.magnitude
+        )
+        .unwrap();
+    } else {
+        writeln!(uart, "Failed to read magnetometer").unwrap();
+    }
 
     let interface = I2CDisplayInterface::new(i2c);
 
@@ -156,7 +173,8 @@ fn main() -> ! {
 
     Rectangle::new(Point::zero(), Size::new(128, 64))
         .into_styled(white_rectangle_style)
-        .draw(&mut display).unwrap();
+        .draw(&mut display)
+        .unwrap();
 
     Text::with_alignment(
         "80% of boys have",
