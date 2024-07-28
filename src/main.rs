@@ -13,6 +13,7 @@ use defmt_rtt as _;
 use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder};
 use embedded_graphics::pixelcolor::{BinaryColor, Rgb565};
 use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::{Alignment, Baseline, Text};
 use fugit::RateExtU32;
 use panic_probe as _;
@@ -133,23 +134,34 @@ fn main() -> ! {
 
     let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
         .into_buffered_graphics_mode();
+
     display.init().unwrap();
 
-    let text_style = MonoTextStyleBuilder::new()
+    // NOTE: SSD1306 only supports binary colours: on and off (white and black)
+    let white_text_style = MonoTextStyleBuilder::new()
         .font(&FONT_6X10)
         .text_color(BinaryColor::On)
         .build();
 
-    // Can't draw with this for some reason
-    let red_style = MonoTextStyleBuilder::new()
+    let black_text_style = MonoTextStyleBuilder::new()
         .font(&FONT_6X10)
-        .text_color(Rgb565::RED)
+        .text_color(BinaryColor::Off)
         .build();
+
+    let white_rectangle_style = PrimitiveStyleBuilder::new()
+        .fill_color(BinaryColor::On)
+        .stroke_color(BinaryColor::On)
+        .stroke_width(3)
+        .build();
+
+    Rectangle::new(Point::zero(), Size::new(128, 64))
+        .into_styled(white_rectangle_style)
+        .draw(&mut display).unwrap();
 
     Text::with_alignment(
         "80% of boys have",
         Point::new(64, 8),
-        text_style,
+        black_text_style,
         Alignment::Center,
     )
     .draw(&mut display)
@@ -158,7 +170,7 @@ fn main() -> ! {
     Text::with_alignment(
         "girlfriends",
         Point::new(64, 24),
-        text_style,
+        black_text_style,
         Alignment::Center,
     )
     .draw(&mut display)
@@ -167,15 +179,20 @@ fn main() -> ! {
     Text::with_alignment(
         "rest 20% are having",
         Point::new(64, 40),
-        text_style,
+        black_text_style,
         Alignment::Center,
     )
     .draw(&mut display)
     .unwrap();
 
-    Text::with_alignment("a brain", Point::new(64, 56), text_style, Alignment::Center)
-        .draw(&mut display)
-        .unwrap();
+    Text::with_alignment(
+        "a brain",
+        Point::new(64, 56),
+        black_text_style,
+        Alignment::Center,
+    )
+    .draw(&mut display)
+    .unwrap();
 
     display.flush().unwrap();
 
