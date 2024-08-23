@@ -17,5 +17,6 @@ docker run \
     -v=/run/udev/control:/run/udev/control \
     -v=./src:/app/src \
     -v=./openocd.gdb:/app/openocd.gdb \
+    -v=./CMakeLists.txt:/app/CMakeLists.txt \
     pico
 

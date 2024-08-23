@@ -35,6 +35,7 @@ ADD .cargo /app/.cargo
 ADD memory.x /app/memory.x
 ADD openocd.gdb /app/openocd.gdb
 ADD build.rs /app/build.rs
+ADD CMakeLists.txt /app/CMakeLists.txt
 ADD run-minicom.sh /app/run-minicom.sh
 ADD run-openocd.sh /app/run-openocd.sh
 
