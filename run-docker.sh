@@ -18,5 +18,10 @@ docker run \
     -v=./src:/app/src \
     -v=./openocd.gdb:/app/openocd.gdb \
     -v=./CMakeLists.txt:/app/CMakeLists.txt \
+    -v=./jartis.c:/app/jartis.c \
+    -v=./jartis.h:/app/jartis.h \
+    -v=./c_build.sh:/app/c_build.sh \
+    -v=./.cargo:/app/.cargo \
+    -v=./build.rs:/app/build.rs \
     pico
 

@@ -55,6 +55,11 @@ use piicodev_ssd1306::{OLEDColour, PiicoDevSSD1306};
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
 use uart::{Uart, UartPins};
 
+#[link(name = "jartis")]
+extern "C" {
+    pub fn connectToWifi() -> i32;
+}
+
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
 
@@ -119,6 +124,13 @@ fn main() -> ! {
             clocks.peripheral_clock.freq(),
         )
         .unwrap();
+
+    let connection_attempt = unsafe { connectToWifi() };
+
+    loop {
+        writeln!(uart, "Continuing... {}", connection_attempt).unwrap();
+        delay.delay_ms(1000);
+    }
 
     // Write something to the UART on start-up so we can check the output pin
     // is wired correctly.

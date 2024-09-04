@@ -13,6 +13,8 @@ FROM setup as hardware
 # Add hardware requirements
 
 RUN rustup target add thumbv6m-none-eabi
+# TODO: Not sure if this target is valid
+RUN rustup target add thumbv7m-none-eabi
 RUN cargo install flip-link
 
 RUN mkdir /home/pico
@@ -35,7 +37,14 @@ ADD .cargo /app/.cargo
 ADD memory.x /app/memory.x
 ADD openocd.gdb /app/openocd.gdb
 ADD build.rs /app/build.rs
+
+# C Compilation
 ADD CMakeLists.txt /app/CMakeLists.txt
+ADD jartis.c /app/jartis.c
+ADD jartis.h /app/jartis.h
+ADD c_build.sh /app/c_build.sh
+
+# Debug utility scripts
 ADD run-minicom.sh /app/run-minicom.sh
 ADD run-openocd.sh /app/run-openocd.sh
 
@@ -49,7 +58,9 @@ FROM build as runtime
 RUN udevadm control --reload-rules || echo "done"
 # RUN udevadm trigger
 
-RUN cargo build
+# RUN /usr/bin/bash /app/c_build.sh
+# RUN cargo build
+RUN cargo fetch
 RUN chown -R ${USERNAME}:${USERNAME} /app
 USER ${USERNAME}
 

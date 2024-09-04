@@ -8,7 +8,8 @@ RUN_OPENOCD="src/openocd -f interface/cmsis-dap.cfg -c 'adapter speed 5000' -f t
 cd openocd && $RUN_OPENOCD &
 
 # Install debug dependencies
-apt install -y gdb-multiarch libudev-dev gcc-arm-none-eabi usbutils udev minicom
+apt update
+apt install -y gdb-multiarch libudev-dev gcc-arm-none-eabi usbutils udev minicom build-essential
 cargo install elf2uf2-rs
 
 # Copy udev configuration for OpenOCD
