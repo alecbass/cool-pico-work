@@ -52,6 +52,7 @@
           # pkgs.gcc-arm-none-eabi
           # pkgs.usbutils
           # pkgs.gdb-multiarch
+          pkgs.gcc-arm-embedded-13
 
           # OpenOCD compilation
           pkgs.automake
