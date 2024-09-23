@@ -6,8 +6,6 @@ version = "0.1.0"
 crate-type = "bin"
 
 [build-dependencies]
-# Remove this if not needed
-cc = "1.1.15"
 
 [dependencies]
 cortex-m = "0.7.7"
@@ -20,7 +18,8 @@ defmt-rtt = "0.4"
 panic-probe = { version = "0.3.1", features = ["print-defmt"] }
 
 # We're using a Pico by default on this template
-rp-pico = "0.9.0"
+# rp-pico = { version = "0.9.0", features = ["disable-intrinsics"] }
+rp-pico = { version = "0.9.0", features = ["boot2", "rt", "critical-section-impl", "rom-func-cache", "disable-intrinsics"] } # disable-intrinsics results in undefined symbols
 
 # For unit conversions
 fugit = "0.3.7"
@@ -32,55 +31,7 @@ libm = "0.2.8"
 embedded-graphics = "0.8.1"
 ssd1306 = "0.8.4"
 
-# cyw43 = { git = "https://github.com/alecbass/embassy.git", branch = "remove-boot2-writing", features = [
-#     "defmt",
-#     "firmware-logs",
-# ] }
-# cyw43-pio = { git = "https://github.com/alecbass/embassy.git", branch = "remove-boot2-writing", features = [
-#     "defmt",
-#     "overclock",
-# ] }
-# embassy-executor = { version = "0.3.0", features = [
-#     "nightly",
-#     "integrated-timers",
-#     "arch-cortex-m",
-#     "executor-thread",
-#     "executor-interrupt",
-#     "defmt",
-# ] }
-# embassy-futures = "0.1.0"
-# embassy-net = { version = "0.1.0", git = "https://github.com/alecbass/embassy.git", branch = "remove-boot2-writing", features = [
-#     "defmt",
-#     "nightly",
-#     "tcp",
-#     "udp",
-#     "dhcpv4",
-#     "medium-ethernet",
-# ] }
-#
-# embassy-rp = { version = "0.1.0", git = "https://github.com/alecbass/embassy.git", branch = "remove-boot2-writing", features = [
-#     "defmt",
-#     "unstable-traits",
-#     "nightly",
-#     "unstable-pac",
-#     "time-driver",
-#     # "critical-section-impl",
-# ] }
-#
-# embassy-time = { version = "0.1.3", git = "https://github.com/alecbass/embassy.git", branch = "remove-boot2-writing", features = [
-#     "nightly",
-#     "unstable-traits",
-#     "defmt",
-#     "defmt-timestamp-uptime",
-# ] }
-# embassy-sync = { version = "0.2.0" }
-# static_cell = { version = "1.2.0", features = ["nightly"] }
 critical-section = "1.1.2"
-# atomic-polyfill = "1.0.3"
-# embedded-hal-bus = "0.1.0-rc.1"
-# embedded-hal-1 = { version = "0.2.7", package = "embedded-hal" }
-# embedded-io-async = "0.5.0"
-# reqwless = "0.5.0"
 
 [patch.crates-io]
 # rp2040-pac = { git = "https://github.com/alecbass/rp2040-pac.git", branch = "remove-interrupts" }

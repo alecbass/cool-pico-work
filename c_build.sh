@@ -2,8 +2,9 @@
 
 static_lib_file="/app/build/libjartis.a"
 static_lib_target_dir="/app/target/thumbv6m-none-eabi/debug/deps/"
-c_lib_dir="/usr/lib/x86_64-linux-gnu/"
-c_lib_file="/usr/lib/x86_64-linux-gnu/libc.a"
+c_lib_dir="/usr/lib/arm-none-eabi/newlib/thumb/v6-m/nofp/"
+# c_lib_file="${c_lib_dir}/newlib/libc.a"
+c_lib_file="${c_lib_dir}libc.a"
 
 if [[ ! -f "$c_lib_file" ]]; then
     echo "Cannot find C standard library libc.a file"
@@ -42,7 +43,9 @@ if [[ ! -d "$static_lib_target_dir" ]]; then
     mkdir -p "$static_lib_target_dir"
 fi
 
-mv "$static_lib_file" "$static_lib_target_dir"
+cp "$static_lib_file" "$static_lib_target_dir"
 
 cp "$c_lib_file" "$static_lib_target_dir"
-# cp "${c_lib_dir}*.a" "$static_lib_target_dir"
+cp "${c_lib_dir}*.a" "$static_lib_target_dir"
+
+cargo build

@@ -12,7 +12,6 @@ use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
 
 fn main() {
     // Put `memory.x` in our output directory and ensure it's
@@ -24,15 +23,19 @@ fn main() {
         .unwrap();
     println!("cargo:rustc-link-search={}", out.display());
 
-    // Build C library
-    Command::new("./c_build.sh").output().unwrap();
-
     // By default, Cargo will re-run a build script whenever
     // any file in the project changes. By specifying `memory.x`
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
 
-    println!("cargo:rustc-link-lib=static=c");
-    println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu/libc.a");
+    // Build C library
+    // Command::new("./c_build.sh").output().unwrap();
+
+    println!("cargo::rustc-link-lib=static=c");
+    println!("cargo::rustc-link-lib=static=jartis");
+    // println!("cargo:rustc-link-search=native=/usr/lib/arm-none-eabi/newlib/libc.a");
+    println!(
+        "cargo::rustc-link-search=native=/usr/lib/arm-none-eabi/newlib/thumb/v6-m/nofp/libc.a"
+    );
 }

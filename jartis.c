@@ -2,8 +2,28 @@
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 
-char ssid[] = "A Network";
-char pass[] = "A Password";
+// TESTS
+#include <sys/time.h>
+#include <sys/times.h>
+#include <unistd.h>
+#include "pico.h"
+
+#include "hardware/regs/m0plus.h"
+#include "hardware/regs/resets.h"
+#include "hardware/structs/mpu.h"
+#include "hardware/structs/scb.h"
+#include "hardware/structs/padsbank0.h"
+
+#include "hardware/clocks.h"
+#include "hardware/irq.h"
+#include "hardware/resets.h"
+
+#include "pico/mutex.h"
+#include "pico/time.h"
+#include "pico/runtime_init.h"
+
+const char ssid[] = "A Network";
+const char pass[] = "A Password";
 
 int connectToWifi() {
     printf("Helloooo\n");
@@ -22,3 +42,4 @@ int connectToWifi() {
     //
     // return 0;
 }
+

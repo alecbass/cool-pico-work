@@ -23,5 +23,6 @@ docker run \
     -v=./c_build.sh:/app/c_build.sh \
     -v=./.cargo:/app/.cargo \
     -v=./build.rs:/app/build.rs \
+    -v=./Cargo.toml:/app/Cargo.toml \
     pico
 

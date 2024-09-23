@@ -12,7 +12,7 @@ rustflags = [
   "-C", "link-arg=-Tlink.x",
   "-C", "link-arg=-Tdefmt.x",
   "-C", "link-arg=-lc",
-  # "-C", "target-feature=+crt-static",
+  "-C", "target-feature=+crt-static",
 
   # Code-size optimizations.
   #   trap unreachable can save a lot of space, but requires nightly compiler.
