@@ -55,10 +55,8 @@ use piicodev_ssd1306::{OLEDColour, PiicoDevSSD1306};
 use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
 use uart::{Uart, UartPins};
 
-#[link(name = "jartis", kind = "static")]
+#[link(name = "jartis")]
 extern "C" {
-    static __StackLimit: u32;
-    static __mutex_array_end: u32;
     pub fn connectToWifi() -> i32;
 }
 

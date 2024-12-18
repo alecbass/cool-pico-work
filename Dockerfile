@@ -13,8 +13,6 @@ FROM setup as hardware
 # Add hardware requirements
 
 RUN rustup target add thumbv6m-none-eabi
-# TODO: Not sure if this target is valid
-RUN rustup target add thumbv7m-none-eabi
 RUN cargo install flip-link
 
 RUN mkdir /home/pico

@@ -34,8 +34,5 @@ fn main() {
 
     println!("cargo::rustc-link-lib=static=c");
     println!("cargo::rustc-link-lib=static=jartis");
-    // println!("cargo:rustc-link-search=native=/usr/lib/arm-none-eabi/newlib/libc.a");
-    println!(
-        "cargo::rustc-link-search=native=/usr/lib/arm-none-eabi/newlib/thumb/v6-m/nofp/libc.a"
-    );
+    // println!("cargo::rustc-link-search=native=target/thumbv6m-none-eabi/debug/deps/libc.a");
 }

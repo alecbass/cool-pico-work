@@ -9,27 +9,12 @@
     supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
-
-    forEachSupportedSystem = callback:
-      nixpkgs.lib.genAttrs supportedSystems (supportedSystem:
-        callback {
-          system = supportedSystem;
-          pkgs = nixpkgs.legacyPackages.${supportedSystem};
-          # pkgs = dream2nix.inputs.nixpkgs.legacyPackages.${supportedSystem};
-        });
-
   in {
     devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
-            cargo
-            rustc
-            rustup
             clang-tools
-            libclang
-            libcxx
-            glibc
-            libgcc
             cmake
+            wget
         ];
         
         env = {};
@@ -42,22 +27,23 @@
           pkgs.openssl
           # Compilation
           # openssl
-          pkgs.pkg-config
-          pkgs.clang
           # pkgs.glibc_multi
 
-          # pkgs.ebugging
-          # pkgs.gdb-multiarch
-          # pkgs.libudev-dev
-          # pkgs.gcc-arm-none-eabi
-          # pkgs.usbutils
-          # pkgs.gdb-multiarch
+          # Rust build dependencies
+          # pkgs.cargo
+          # pkgs.rustc
+          # pkgs.rustup
+
           pkgs.gcc-arm-embedded-13
+
+          # NOTE: IT would be good to have these enabled but pico_setup.sh fails?
+          # pkgs.libcxx
+          # pkgs.glibc
+          # pkgs.libgcc
 
           # OpenOCD compilation
           pkgs.automake
           pkgs.autoconf
-          # pkgs.build-essential
           pkgs.texinfo
           pkgs.libtool
           # pkgs.libftdi

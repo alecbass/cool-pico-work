@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Exit on error
 set -e
@@ -31,9 +31,19 @@ else
     DEPS="$DEPS $OPENOCD_DEPS"
 fi
 
+if [[ -d build ]]; then
+    echo "Clearing existing build directory"
+    rm -rf build
+fi
+
+if [[ -d pico ]]; then
+    echo "Clearing existing pico directory"
+    rm -rf pico
+fi
+
 echo "Installing Dependencies"
-sudo apt update
-sudo apt install -y $DEPS
+# apt update
+# apt install -y $DEPS
 
 echo "Creating $OUTDIR"
 # Create pico directory to put everything in
@@ -61,10 +71,17 @@ do
         git submodule update --init
         cd $OUTDIR
 
-        # Define PICO_SDK_PATH in ~/.bashrc
+        # Define PICO_SDK_PATH in  environment variables - the original script saves this into ~/.bashrc but we have a .env file
         VARNAME="PICO_${REPO^^}_PATH"
-        echo "Adding $VARNAME to ~/.bashrc"
-        echo "export $VARNAME=$DEST" >> ~/.bashrc
+
+        if [[ -f .env ]]; then
+            # Clear the environment file
+            rm .env
+        fi
+
+        touch .env
+        echo "Adding $VARNAME to .env"
+        echo "export $VARNAME=$DEST" >> .env
         export ${VARNAME}=$DEST
     fi
 done
@@ -72,7 +89,7 @@ done
 cd $OUTDIR
 
 # Pick up new variables we just defined
-source ~/.bashrc
+source .env
 
 # Build a couple of examples
 cd "$OUTDIR/pico-examples"
@@ -107,7 +124,8 @@ do
 
     if [[ "$REPO" == "picotool" ]]; then
         echo "Installing picotool to /usr/local/bin/picotool"
-        sudo cp picotool /usr/local/bin/
+        # cp picotool /usr/local/bin/
+        cp picotool .
     fi
 
     cd $OUTDIR
@@ -139,7 +157,7 @@ else
     ./bootstrap
     ./configure $OPENOCD_CONFIGURE_ARGS
     make -j$JNUM
-    sudo make install
+    make install
 fi
 
 cd $OUTDIR
@@ -148,7 +166,7 @@ if [[ "$SKIP_VSCODE" == 1 ]]; then
     echo "Skipping VSCODE"
 else
     echo "Installing VSCODE"
-    sudo apt install -y $VSCODE_DEPS
+    apt install -y $VSCODE_DEPS
 
     # Get extensions
     code --install-extension marus25.cortex-debug
@@ -160,8 +178,8 @@ fi
 if [[ "$SKIP_UART" == 1 ]]; then
     echo "Skipping uart configuration"
 else
-    sudo apt install -y $UART_DEPS
+    apt install -y $UART_DEPS
     echo "Disabling Linux serial console (UART) so we can use it for pico"
-    sudo raspi-config nonint do_serial 2
-    echo "You must run sudo reboot to finish UART setup"
+    raspi-config nonint do_serial 2
+    echo "You must run reboot to finish UART setup"
 fi
