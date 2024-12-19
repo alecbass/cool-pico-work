@@ -6,3 +6,12 @@ build.sh
 !.vscode/tasks.json
 *.uf2
 .env
+
+# C compilation
+.cache/
+build/
+pico/
+cortex-m/
+
+# Debugging
+openocd/

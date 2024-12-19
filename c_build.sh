@@ -19,13 +19,6 @@ if [[ -d /nix/store/ ]]; then
     echo "C library directory found at ${c_lib_dir}"
 fi
 
-c_lib_file="${c_lib_dir}libc.a"
-
-if [[ ! -f "$c_lib_file" ]]; then
-    echo "Cannot find C standard library libc.a file"
-    exit 1
-fi
-
 if [[ ! -d build ]]; then
     mkdir build
 fi
@@ -68,7 +61,17 @@ fi
 
 cp "$static_lib_file" "$static_lib_target_dir"
 
-cp "$c_lib_file" "$static_lib_target_dir"
-cp "${c_lib_dir}*.a" "$static_lib_target_dir"
+echo "Statting $c_lib_dir"
 
-cargo build
+for file in $(ls $c_lib_dir); do
+    if [[ $file != *.a ]]; then
+        continue
+    fi
+
+    echo "Moving $file - will require sudo to copy the C library .a static libraries :("
+    sudo cp "${c_lib_dir}${file}" "$static_lib_target_dir"
+done
+
+echo "C lib dir: $c_lib_dir"
+
+echo "C compilation complete!"

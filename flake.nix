@@ -26,8 +26,6 @@
         buildInputs = [
           pkgs.openssl
           # Compilation
-          # openssl
-          # pkgs.glibc_multi
 
           # Rust build dependencies
           # pkgs.cargo
@@ -46,7 +44,6 @@
           pkgs.autoconf
           pkgs.texinfo
           pkgs.libtool
-          # pkgs.libftdi
           pkgs.libftdi1
           pkgs.libusb1
           pkgs.udev

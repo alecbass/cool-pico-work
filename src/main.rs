@@ -15,6 +15,7 @@ use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::{Alignment, Text};
+use embedded_hal::digital::OutputPin;
 use fugit::RateExtU32;
 use panic_probe as _;
 
@@ -124,6 +125,11 @@ fn main() -> ! {
             clocks.peripheral_clock.freq(),
         )
         .unwrap();
+
+    let mut led = pins.led.into_push_pull_output();
+    led.set_high().unwrap();
+
+    writeln!(uart, "hieeeeGGGGeee").unwrap();
 
     let connection_attempt = unsafe { connectToWifi() };
 
@@ -239,8 +245,6 @@ fn main() -> ! {
     .unwrap();
 
     display.flush().unwrap();
-
-    loop {}
 
     // Turn IO devices into shared pointers
     let i2c_cell = RefCell::new(i2c);
