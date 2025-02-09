@@ -5,55 +5,54 @@
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-24.11";
   };
 
-  outputs = { self, nixpkgs }: let
+  outputs = inputs@{ self, nixpkgs }: let
     supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
-    system = "x86_64-linux";
-    pkgs = nixpkgs.legacyPackages.${system};
+    forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems (system: f {
+      inherit system;
+      pkgs = import nixpkgs { inherit system; };
+    });
   in {
-    devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [
-            clang-tools
-            cmake
-            wget
-        ];
-        
-        env = {};
-
-        nativeBuildInputs = [
-          pkgs.pkg-config
+    devShell = forAllSystems({ pkgs, system }: 
+      pkgs.mkShell {
+        nativeBuildInputs = with pkgs; [
+          pkg-config
         ];
 
-        buildInputs = [
-          pkgs.openssl
+        buildInputs = with pkgs; [
+          clang-tools
+          cmake
+          wget
+          openssl
           # Compilation
 
           # Rust build dependencies
-          # pkgs.cargo
-          # pkgs.rustc
-          # pkgs.rustup
+          # cargo
+          # rustc
+          # rustup
 
-          pkgs.gcc-arm-embedded-13
+          gcc-arm-embedded-13
 
-          # NOTE: IT would be good to have these enabled but pico_setup.sh fails?
-          # pkgs.libcxx
-          # pkgs.glibc
-          # pkgs.libgcc
+          # NOTE: It would be good to have these enabled but pico_setup.sh fails?
+          # libcxx
+          # glibc
+          # libgcc
 
           # OpenOCD compilation
-          pkgs.automake
-          pkgs.autoconf
-          pkgs.texinfo
-          pkgs.libtool
-          pkgs.libftdi1
-          pkgs.libusb1
-          pkgs.udev
-          pkgs.minicom
+          automake
+          autoconf
+          texinfo
+          libtool
+          libftdi1
+          libusb1
+          udev
+          minicom
         ]
         ++ nixpkgs.lib.optionals (pkgs.stdenv.isDarwin) [
-          pkgs.libiconv
-          pkgs.darwin.apple_sdk.frameworks.Security
-          pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
+          libiconv
+          darwin.apple_sdk.frameworks.Security
+          darwin.apple_sdk.frameworks.SystemConfiguration
       ];
-    };
+    }
+  );
   };
 }
