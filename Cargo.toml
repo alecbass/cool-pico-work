@@ -6,6 +6,11 @@ version = "0.1.0"
 crate-type = "bin"
 
 [build-dependencies]
+# Used to create Rust bindings to C functions
+bindgen = "0.71.1"
+
+# Used to compile Jartis c files
+cc = "1.2.10"
 
 [dependencies]
 cortex-m = "0.7.7"

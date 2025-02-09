@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
-set(SOURCE_FILES jartis.c jartis.h)
+set(SOURCE_FILES src/jartis.c src/jartis.h)
 
 add_library(jartis STATIC ${SOURCE_FILES})
 

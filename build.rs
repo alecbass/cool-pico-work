@@ -23,6 +23,33 @@ fn main() {
         .unwrap();
     println!("cargo:rustc-link-search={}", out.display());
 
+    // Tell Cargo to link the Pico SDK
+    println!(
+        "cargo:rustc-link-search={}",
+        env::var("PICO_SDK_PATH").unwrap()
+    );
+
+    // Link the C standard library
+    println!("cargo::rustc-link-lib=static=c");
+
+    // Build the Pico SDK C code
+    cc::Build::new()
+        .file("src/jartis.c") // Path to your C wrapper file
+        .include(&env::var("PICO_SDK_PATH").unwrap())
+        .compile("jartis");
+
+    // Generate Rust bindings for the C wrapper
+    // let bindings = bindgen::Builder::default()
+    //     .header("jartis.h") // Path to your C header file
+    //     .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+    //     .generate()
+    //     .expect("Unable to generate bindings");
+    //
+    // // Write the bindings to a file
+    // bindings
+    //     .write_to_file(out.join("bindings.rs"))
+    //     .expect("Couldn't write bindings!");
+
     // By default, Cargo will re-run a build script whenever
     // any file in the project changes. By specifying `memory.x`
     // here, we ensure the build script is only re-run when
@@ -32,7 +59,6 @@ fn main() {
     // Build C library
     // Command::new("./c_build.sh").output().unwrap();
 
-    println!("cargo::rustc-link-lib=static=c");
-    println!("cargo::rustc-link-lib=static=jartis");
+    // println!("cargo::rustc-link-lib=static=jartis");
     // println!("cargo::rustc-link-search=native=target/thumbv6m-none-eabi/debug/deps/libc.a");
 }
