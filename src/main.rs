@@ -20,6 +20,7 @@ use embedded_hal::pwm::SetDutyCycle;
 use fugit::RateExtU32;
 use panic_probe as _;
 
+use rfid_flasher::rfid_flasher;
 // Provide an alias for our BSP so we can switch targets quickly.
 // Uncomment the BSP you included in Cargo.toml, the rest of the code does not need to change.
 use rp_pico as bsp;
@@ -39,25 +40,7 @@ use bsp::Pins;
 use servo::Servo;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 
-mod i2c;
-mod piicodev_bme280;
-mod piicodev_buzzer;
-mod piicodev_qmc6310;
-mod piicodev_rgb;
-mod piicodev_ssd1306;
-mod piicodev_vl53l1x;
-mod servo;
-mod uart;
-
-use i2c::I2CHandler;
-use piicodev_bme280::piicodev_bme280::PiicoDevBME280;
-use piicodev_buzzer::notes::HARMONY;
-use piicodev_buzzer::piicodev_buzzer::{BuzzerVolume, PiicoDevBuzzer};
-use piicodev_qmc6310::{GaussRange, PiicoDevQMC6310};
-use piicodev_rgb::piicodev_rgb::PiicoDevRGB;
-use piicodev_ssd1306::{OLEDColour, PiicoDevSSD1306};
-use piicodev_vl53l1x::piicodev_vl53l1x::PiicoDevVL53L1X;
-use uart::{Uart, UartPins};
+mod rfid_flasher;
 
 #[link(name = "jartis")]
 extern "C" {
@@ -104,6 +87,9 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
+    #[cfg(target_feature = "rfid_flasher")]
+    rfid_flasher(pins);
+
     // This is the correct pin on the Raspberry Pico board. On other boards, even if they have an
     // on-board LED, it might need to be changed.
     //
@@ -113,7 +99,6 @@ fn main() -> ! {
     // If you have a Pico W and want to toggle a LED with a simple GPIO output pin, you can connect an external
     // LED to one of the GPIO pins, and reference that pin here. Don't forget adding an appropriate resistor
     // in series with the LED.
-
     let uart_pins: UartPins = (
         // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
         pins.gpio0.reconfigure::<FunctionUart, PullNone>(),

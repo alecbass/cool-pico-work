@@ -13,31 +13,10 @@ bindgen = "0.71.1"
 cc = "1.2.10"
 
 [dependencies]
-cortex-m = "0.7.7"
-# cortex-m = { path = "./cortex-m/cortex-m" }
-cortex-m-rt = "0.7.5"
-# cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
-embedded-hal = { version = "1.0.0" }
-embedded-hal-nb = { version = "1.0.0" }
-
-defmt = "0.3.5"
-defmt-rtt = "0.4"
-panic-probe = { version = "0.3.2", features = ["print-defmt"] }
-
-# We're using a Pico by default on this template
+# Shared with jartis so we can use pins and such
 rp-pico = { version = "0.9.0", features = ["boot2", "rt", "critical-section-impl", "rom-func-cache", "disable-intrinsics"] } # disable-intrinsics results in undefined symbols
 
-# For unit conversions
-fugit = "0.3.7"
-
-# For mathematics
-libm = "0.2.8"
-
-# For OLED display
-embedded-graphics = "0.8.1"
-ssd1306 = "0.8.4"
-
-critical-section = "1.1.2"
+jartis = { path = "./jartis" }
 
 [patch.crates-io]
 # rp2040-pac = { git = "https://github.com/alecbass/rp2040-pac.git", branch = "remove-interrupts" }
@@ -51,6 +30,9 @@ critical-section = "1.1.2"
 # rp2040-boot2 = "0.2"
 # cortex-m = { path = "./cortex-m/cortex-m" }
 cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
+
+[features]
+rfid-flasher = []
 
 # cargo build/run
 [profile.dev]

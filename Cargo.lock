@@ -135,19 +135,8 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cc",
- "cortex-m",
- "cortex-m-rt",
- "critical-section",
- "defmt",
- "defmt-rtt",
- "embedded-graphics",
- "embedded-hal 1.0.0",
- "embedded-hal-nb",
- "fugit",
- "libm",
- "panic-probe",
+ "jartis",
  "rp-pico",
- "ssd1306",
 ]
 
 [[package]]
@@ -442,6 +431,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
 dependencies = [
  "either",
+]
+
+[[package]]
+name = "jartis"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "critical-section",
+ "defmt",
+ "defmt-rtt",
+ "embedded-graphics",
+ "embedded-hal 1.0.0",
+ "embedded-hal-nb",
+ "fugit",
+ "libm",
+ "panic-probe",
+ "rp-pico",
+ "ssd1306",
 ]
 
 [[package]]
