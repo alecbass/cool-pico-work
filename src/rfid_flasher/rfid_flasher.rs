@@ -1,23 +1,37 @@
 use core::fmt::Write;
 
 use cortex_m::delay::Delay;
-use embedded_hal::digital::{InputPin, OutputPin, StatefulOutputPin};
+use embedded_hal::digital::InputPin;
 use fugit::RateExtU32;
+use jartis::i2c::I2CHandler;
+use jartis::piicodev_ssd1306::PiicoDevSSD1306;
+use jartis::uart::{Uart, UartPins};
 use rp_pico::hal::clocks::ClocksManager;
-use rp_pico::hal::gpio::{FunctionUart, PullNone};
+use rp_pico::hal::gpio::{FunctionI2C, FunctionUart, PullNone, PullUp};
 use rp_pico::hal::uart::UartPeripheral;
 use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
-use rp_pico::hal::Clock;
-use rp_pico::pac::{RESETS, UART0};
+use rp_pico::hal::{Clock, I2C};
+use rp_pico::pac::{I2C0, RESETS, UART0};
 use rp_pico::Pins;
 
-use jartis::uart::{Uart, UartPins};
-
 use super::state::State;
+
+/// Updates the OLED so that the updated state can appear on it
+fn update_oled(state: &State, oled: &mut PiicoDevSSD1306) -> Result<(), ()> {
+    // Clear the text
+    // oled.reset()?;
+
+    if state.is_reading() {
+        return oled.write_text("Reading RFID...");
+    }
+
+    oled.write_text("Writing RFID...")
+}
 
 /// Runs the RFID flasher program
 pub fn rfid_flasher_main(
     uart_device: UART0,
+    i2c_device: I2C0,
     resets: &mut RESETS,
     clocks: ClocksManager,
     pins: Pins,
@@ -37,12 +51,30 @@ pub fn rfid_flasher_main(
         )
         .unwrap();
 
-    writeln!(uart, "Running RFID flasher").unwrap();
+    // Create I2C for the OLED display
+    let i2c: I2CHandler = I2C::i2c0(
+        i2c_device,
+        pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
+        pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
+        400.kHz(),
+        resets,
+        125_000_000.Hz(),
+    );
+
+    let mut oled = PiicoDevSSD1306::new(i2c);
+
+    // if let Err(()) = oled.reset() {
+    //     writeln!(uart, "OLED error").unwrap();
+    // }
+    if let Err(()) = oled.write_text("Man this RFID guy...") {
+        writeln!(uart, "OLED error").unwrap();
+    }
 
     let mut state = State::new();
-
-    // Reset GPIO15 for a button to read input
     let mut button_pin = pins.gpio15.into_pull_down_input();
+
+    // If this is true, the next iterations of the loop won't toggle the state's mode between
+    // reading or writing until it is set to false again (when the button is lifted)
     let mut is_holding_toggle_button = false;
 
     // Blink the LED at 1 Hz
@@ -55,15 +87,12 @@ pub fn rfid_flasher_main(
             // Toggle to the other mode and mark the button as being held so it doesn't keep toggling
             is_holding_toggle_button = true;
             state.toggle_mode();
+            if let Err(()) = update_oled(&state, &mut oled) {
+                writeln!(uart, "OLED error").unwrap();
+            }
         } else if !is_button_pressed {
             // Release the button so it can be toggled upon the next press
             is_holding_toggle_button = false;
-        }
-
-        if state.is_reading() {
-            writeln!(uart, "Reading...").unwrap();
-        } else {
-            writeln!(uart, "Writing...").unwrap();
         }
 
         delay.delay_ms(50);

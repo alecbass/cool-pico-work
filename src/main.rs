@@ -64,7 +64,9 @@ fn main() -> ! {
     let runtime = option_env!("PROGRAM");
 
     match runtime {
-        Some("RFID_FLASHER") => rfid_flasher_main(pac.UART0, &mut pac.RESETS, clocks, pins, delay),
+        Some("RFID_FLASHER") => {
+            rfid_flasher_main(pac.UART0, pac.I2C0, &mut pac.RESETS, clocks, pins, delay)
+        }
         _ => loop {},
     }
 
@@ -128,15 +130,6 @@ fn main() -> ! {
 
     // Write something to the UART on start-up so we can check the output pin
     // is wired correctly.
-
-    // let mut i2c: I2CHandler = I2C::i2c0(
-    //     pac.I2C0,
-    //     pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
-    //     pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
-    //     400.kHz(),
-    //     &mut pac.RESETS,
-    //     125_000_000.Hz(),
-    // );
 
     // let declination = 12.64; // Brisbane
     // let mut magnetometer = PiicoDevQMC6310::new(None, Some(GaussRange::Gauss1200), declination);

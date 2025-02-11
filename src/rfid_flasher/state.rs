@@ -38,8 +38,4 @@ impl State {
     pub fn is_reading(&self) -> bool {
         self.mode == Mode::Read
     }
-
-    pub fn is_writing(&self) -> bool {
-        self.mode == Mode::Write
-    }
 }

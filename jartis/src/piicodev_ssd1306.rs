@@ -1,9 +1,13 @@
-use core::cell::RefCell;
-
+use embedded_graphics::geometry::{Point, Size};
+use embedded_graphics::mono_font::ascii::{FONT_6X10, FONT_6X12};
+use embedded_graphics::mono_font::MonoTextStyleBuilder;
+use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::{Primitive, PrimitiveStyleBuilder, Rectangle};
+use embedded_graphics::text::{Alignment, Text};
 use embedded_hal::i2c::I2c;
-use libm::{cosf, sinf};
 use rp_pico::hal::i2c::Error;
-use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
+use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
 
 use crate::i2c::I2CHandler;
 
@@ -26,6 +30,7 @@ const _SET_DISP_CLK_DIV: u8 = 0xD5;
 const _SET_PRECHARGE: u8 = 0xD9;
 const _SET_VCOM_DESEL: u8 = 0xDB;
 const _SET_CHARGE_PUMP: u8 = 0x8D;
+
 const WIDTH: u8 = 128;
 const HEIGHT: u8 = 64;
 
@@ -47,23 +52,16 @@ impl Into<u8> for OLEDColour {
     }
 }
 
+type Ssd1306OledDisplay =
+    Ssd1306<I2CInterface<I2CHandler>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>;
+
 pub struct PiicoDevSSD1306 {
-    addr: u8,
-    i2c: I2CHandler,
-    buffer: [u8; BUFFER_SIZE],
+    display: Ssd1306OledDisplay,
 }
 
 impl PiicoDevSSD1306 {
-    pub fn new(i2c: I2CHandler) -> Self {
-        Self {
-            addr: BASE_ADDR,
-            i2c,
-            buffer: [0; BUFFER_SIZE],
-        }
-    }
-
-    /// Initialise the display
-    pub fn init(&mut self) -> Result<(), Error> {
+    pub fn new(mut i2c: I2CHandler) -> Self {
+        // Initialise the OLED display
         for cmd in [
             _SET_DISP, // display off
             // address setting
@@ -98,116 +96,54 @@ impl PiicoDevSSD1306 {
             0x14,
             _SET_DISP | 0x01, // display on
         ] {
-            self.write_cmd(cmd)?;
+            Self::write_cmd(&mut i2c, cmd).unwrap();
         }
 
-        Ok(())
+        // Convert the I2C into an OLED display
+        let interface = I2CDisplayInterface::new(i2c);
+        let display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+            .into_buffered_graphics_mode();
+
+        Self { display }
     }
 
-    fn write_cmd(&mut self, command: u8) -> Result<(), Error> {
-        self.i2c.write(self.addr, &[0x80, command])
+    /// Writes a given byte as an I2C command to the OLED display
+    fn write_cmd(i2c: &mut I2CHandler, command: u8) -> Result<(), Error> {
+        i2c.write(BASE_ADDR, &[0x80, command])
     }
 
-    pub fn show(&mut self) -> Result<(), Error> {
-        let x0 = 0;
-        let x1 = WIDTH - 1;
-        self.write_cmd(_SET_COL_ADDR)?;
-        self.write_cmd(x0)?;
-        self.write_cmd(x1)?;
-        self.write_cmd(_SET_PAGE_ADDR)?;
-        self.write_cmd(0)?;
-        self.write_cmd(PAGES - 1)?;
+    pub fn set_white_background(&mut self) -> Result<(), ()> {
+        let white_rectangle_style = PrimitiveStyleBuilder::new()
+            .fill_color(BinaryColor::On)
+            .stroke_color(BinaryColor::On)
+            .stroke_width(3)
+            .build();
 
-        // write_data replacement
-        self.buffer[0] = 0x40;
-        self.i2c.write(self.addr, &self.buffer)
+        Rectangle::new(Point::zero(), Size::new(128, 64))
+            .into_styled(white_rectangle_style)
+            .draw(&mut self.display)
+            .map_err(|_e| ())?;
+
+        self.display.flush().map_err(|_e| ())
     }
 
-    pub fn power_off(&mut self) -> Result<(), Error> {
-        self.write_cmd(_SET_DISP)
+    pub fn write_text(&mut self, text: &str) -> Result<(), ()> {
+        self.display.clear(BinaryColor::On).map_err(|_e| ())?;
+
+        let black_text_style = MonoTextStyleBuilder::new()
+            .font(&FONT_6X12)
+            .text_color(BinaryColor::Off)
+            .build();
+
+        Text::with_alignment(text, Point::new(64, 8), black_text_style, Alignment::Center)
+            .draw(&mut self.display)
+            .map_err(|_e| ())?;
+
+        self.display.flush().map_err(|_e| ())
     }
 
-    pub fn power_on(&mut self) -> Result<(), Error> {
-        self.write_cmd(_SET_DISP | 0x01)
-    }
-
-    pub fn set_contrast(&mut self, contrast: u8) -> Result<(), Error> {
-        self.write_cmd(_SET_CONTRAST)?;
-        self.write_cmd(contrast)
-    }
-
-    pub fn invert(&mut self, invert: u8) -> Result<(), Error> {
-        self.write_cmd(_SET_NORM_INV | (invert & 1))
-    }
-
-    pub fn rotate(&mut self, rotate: u8) -> Result<(), Error> {
-        self.write_cmd(_SET_COM_OUT_DIR | ((rotate & 1) << 3))?;
-        self.write_cmd(_SET_SEG_REMAP | (rotate & 1))
-    }
-
-    pub fn pixel(&mut self, x: u8, y: u8, colour: OLEDColour) {
-        fn set_pixel(buffer: &mut [u8], stride: u8, x: u8, y: u8, colour: OLEDColour) {
-            let x_coord = x & (WIDTH - 1);
-            let y_coord = y & (HEIGHT - 1);
-            let page = y / 8; // page, shift_page = divmod(y, 8)
-            let shift_page = 0;
-
-            let index = x + page * 128;
-            let index = index as usize;
-
-            // let index = ((y_coord >> 3) * stride as u32 + x_coord) as usize;
-            // let offset = y_coord & 0x07;
-            // let b = match colour {
-            //     OLEDColour::WHITE => buffer[index] | (1 << shift_page),
-            //     OLEDColour::BLACK => buffer[index] & !(1 << shift_page),
-            // };
-            //
-            // // pack_into(">B", self.buffer, ind, b)
-            //
-            // let new = (buffer[index] & !(0x01 << offset))
-            //     | ((u8::from(colour != OLEDColour::BLACK)) << offset);
-            //
-            // buffer[index] = new;
-        }
-
-        // let index: usize = (x + y) as usize;
-        // self.buffer[index] = colour;
-        set_pixel(&mut self.buffer, WIDTH, x, y, colour)
-    }
-
-    pub fn fill_rect(&mut self, x: u8, y: u8, x_offset: u8, y_offset: u8, colour: OLEDColour) {
-        for x_coord in 0..x {
-            for y_coord in 0..y {
-                self.pixel(x_coord + x_offset, y_coord + y_offset, colour);
-            }
-        }
-    }
-
-    pub fn fill(&mut self, colour: OLEDColour) {
-        const FULL_HEIGHT: u8 = 128;
-        const FULL_WIDTH: u8 = 255;
-
-        self.fill_rect(FULL_HEIGHT, FULL_WIDTH, 0, 0, colour);
-    }
-
-    pub fn arc(&mut self, x: u8, y: u8, r: u8, start_angle: u8, end_angle: u8) {
-        let t = 0;
-
-        let test = r * (1 - t) - 1;
-        let x = x as f32;
-        let y = y as f32;
-
-        for i in (r * (1 - t) - 1)..r {
-            for ta in start_angle..end_angle {
-                let x = (i as f32 * (cosf((ta as f64).to_radians() as f32) + x)) as u8;
-                let y = (i as f32 * (sinf((ta as f64).to_radians() as f32) + y)) as u8;
-                self.pixel(x, y, OLEDColour::WHITE);
-            }
-        }
-    }
-
-    pub fn circ(&self, x: u8, y: u8, r: u8) {
-        let t = 1 as u8;
-        let c = 1 as u8;
+    pub fn reset(&mut self) -> Result<(), ()> {
+        self.display.clear(BinaryColor::On).map_err(|_e| ())?;
+        self.display.flush().map_err(|_e| ())
     }
 }

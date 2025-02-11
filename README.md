@@ -21,3 +21,10 @@ Minicom doesn't seem to read anything, so I've had more access using this method
 sudo chmod a+rw /dev/ttyACM0
 cat /dev/ttyACM0
 ```
+
+# Programs
+This repository contains some programs ready to flash onto a PICO. To run them, set the PROGRAM environment variable
+before running `cargo build` or `cargo run`.
+
+* RFID_FLASHER - Reads and flashes RFID chips.
+
