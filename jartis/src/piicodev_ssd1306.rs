@@ -47,14 +47,14 @@ impl Into<u8> for OLEDColour {
     }
 }
 
-pub struct PiicoDevSSD1306<'i2c> {
+pub struct PiicoDevSSD1306 {
     addr: u8,
-    i2c: &'i2c RefCell<I2CHandler>,
+    i2c: I2CHandler,
     buffer: [u8; BUFFER_SIZE],
 }
 
-impl<'i2c> PiicoDevSSD1306<'i2c> {
-    pub fn new(i2c: &'i2c RefCell<I2CHandler>) -> Self {
+impl PiicoDevSSD1306 {
+    pub fn new(i2c: I2CHandler) -> Self {
         Self {
             addr: BASE_ADDR,
             i2c,
@@ -64,8 +64,6 @@ impl<'i2c> PiicoDevSSD1306<'i2c> {
 
     /// Initialise the display
     pub fn init(&mut self) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
         for cmd in [
             _SET_DISP, // display off
             // address setting
@@ -100,63 +98,51 @@ impl<'i2c> PiicoDevSSD1306<'i2c> {
             0x14,
             _SET_DISP | 0x01, // display on
         ] {
-            self.write_cmd(cmd, &mut i2c)?;
+            self.write_cmd(cmd)?;
         }
 
         Ok(())
     }
 
-    fn write_cmd(&mut self, command: u8, i2c: &mut I2CHandler) -> Result<(), Error> {
-        i2c.write(self.addr, &[0x80, command])
+    fn write_cmd(&mut self, command: u8) -> Result<(), Error> {
+        self.i2c.write(self.addr, &[0x80, command])
     }
 
     pub fn show(&mut self) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
         let x0 = 0;
         let x1 = WIDTH - 1;
-        self.write_cmd(_SET_COL_ADDR, &mut i2c)?;
-        self.write_cmd(x0, &mut i2c)?;
-        self.write_cmd(x1, &mut i2c)?;
-        self.write_cmd(_SET_PAGE_ADDR, &mut i2c)?;
-        self.write_cmd(0, &mut i2c)?;
-        self.write_cmd(PAGES - 1, &mut i2c)?;
+        self.write_cmd(_SET_COL_ADDR)?;
+        self.write_cmd(x0)?;
+        self.write_cmd(x1)?;
+        self.write_cmd(_SET_PAGE_ADDR)?;
+        self.write_cmd(0)?;
+        self.write_cmd(PAGES - 1)?;
 
         // write_data replacement
         self.buffer[0] = 0x40;
-        i2c.write(self.addr, &self.buffer)
+        self.i2c.write(self.addr, &self.buffer)
     }
 
     pub fn power_off(&mut self) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
-        self.write_cmd(_SET_DISP, &mut i2c)
+        self.write_cmd(_SET_DISP)
     }
 
     pub fn power_on(&mut self) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
-        self.write_cmd(_SET_DISP | 0x01, &mut i2c)
+        self.write_cmd(_SET_DISP | 0x01)
     }
 
     pub fn set_contrast(&mut self, contrast: u8) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
-        self.write_cmd(_SET_CONTRAST, &mut i2c)?;
-        self.write_cmd(contrast, &mut i2c)
+        self.write_cmd(_SET_CONTRAST)?;
+        self.write_cmd(contrast)
     }
 
     pub fn invert(&mut self, invert: u8) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
-        self.write_cmd(_SET_NORM_INV | (invert & 1), &mut i2c)
+        self.write_cmd(_SET_NORM_INV | (invert & 1))
     }
 
     pub fn rotate(&mut self, rotate: u8) -> Result<(), Error> {
-        let mut i2c = self.i2c.borrow_mut();
-
-        self.write_cmd(_SET_COM_OUT_DIR | ((rotate & 1) << 3), &mut i2c)?;
-        self.write_cmd(_SET_SEG_REMAP | (rotate & 1), &mut i2c)
+        self.write_cmd(_SET_COM_OUT_DIR | ((rotate & 1) << 3))?;
+        self.write_cmd(_SET_SEG_REMAP | (rotate & 1))
     }
 
     pub fn pixel(&mut self, x: u8, y: u8, colour: OLEDColour) {
