@@ -24,19 +24,19 @@ fn main() {
     println!("cargo:rustc-link-search={}", out.display());
 
     // Tell Cargo to link the Pico SDK
-    println!(
-        "cargo:rustc-link-search={}",
-        env::var("PICO_SDK_PATH").unwrap()
-    );
+    // println!(
+    //     "cargo:rustc-link-search={}",
+    //     env::var("PICO_SDK_PATH").unwrap()
+    // );
 
     // Link the C standard library
-    println!("cargo::rustc-link-lib=static=c");
+    // println!("cargo::rustc-link-lib=static=c");
 
     // Build the Pico SDK C code
-    cc::Build::new()
-        .file("src/jartis.c") // Path to your C wrapper file
-        .include(&env::var("PICO_SDK_PATH").unwrap())
-        .compile("jartis");
+    // cc::Build::new()
+    //     .file("src/jartis.c") // Path to your C wrapper file
+    //     .include(&env::var("PICO_SDK_PATH").unwrap())
+    //     .compile("jartis");
 
     // Generate Rust bindings for the C wrapper
     // let bindings = bindgen::Builder::default()

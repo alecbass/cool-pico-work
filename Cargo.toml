@@ -13,26 +13,24 @@ bindgen = "0.71.1"
 cc = "1.2.10"
 
 [dependencies]
+
+cortex-m-rt = "0.7.5"
+cortex-m = "0.7.7"
+
+embedded-hal = { version = "1.0.0" }
+embedded-hal-nb = { version = "1.0.0" }
+
 # Shared with jartis so we can use pins and such
-rp-pico = { version = "0.9.0", features = ["boot2", "rt", "critical-section-impl", "rom-func-cache", "disable-intrinsics"] } # disable-intrinsics results in undefined symbols
+# rp-pico = { version = "0.9.0", features = ["boot2", "rt", "critical-section-impl", "rom-func-cache", "disable-intrinsics"] } # disable-intrinsics results in undefined symbols
+rp-pico = { version = "0.9.0" }
 
 jartis = { path = "./jartis" }
 
+# For unit conversions
+fugit = "0.3.7"
+
 [patch.crates-io]
-# rp2040-pac = { git = "https://github.com/alecbass/rp2040-pac.git", branch = "remove-interrupts" }
-# embedded-io-async = { version = "0.5.0", optional = true }
-
-# but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
-# sparkfun-pro-micro-rp2040 = "0.3"
-
-# If you're not going to use a Board Support Package you'll need these:
-# rp2040-hal = { version="0.6", features=["rt"] }
-# rp2040-boot2 = "0.2"
-# cortex-m = { path = "./cortex-m/cortex-m" }
-cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
-
-[features]
-rfid-flasher = []
+# cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
 
 # cargo build/run
 [profile.dev]

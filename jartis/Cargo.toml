@@ -7,9 +7,8 @@ crate-type = "lib"
 
 [dependencies]
 cortex-m = "0.7.7"
-# cortex-m = { path = "./cortex-m/cortex-m" }
 cortex-m-rt = "0.7.5"
-# cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
+
 embedded-hal = { version = "1.0.0" }
 embedded-hal-nb = { version = "1.0.0" }
 
@@ -43,5 +42,5 @@ critical-section = "1.1.2"
 # rp2040-hal = { version="0.6", features=["rt"] }
 # rp2040-boot2 = "0.2"
 # cortex-m = { path = "./cortex-m/cortex-m" }
-cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
+# cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
 

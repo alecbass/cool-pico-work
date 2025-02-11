@@ -4,48 +4,23 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
-use core::fmt::Write;
-
-use cortex_m::delay::Delay;
-use defmt::*;
-use defmt_rtt as _;
-use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder};
-use embedded_graphics::pixelcolor::BinaryColor;
-use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
-use embedded_graphics::text::{Alignment, Text};
-use embedded_hal::digital::InputPin;
-use embedded_hal::pwm::SetDutyCycle;
-use fugit::RateExtU32;
-use panic_probe as _;
-
-use rfid_flasher::rfid_flasher;
-// Provide an alias for our BSP so we can switch targets quickly.
-// Uncomment the BSP you included in Cargo.toml, the rest of the code does not need to change.
-use rp_pico as bsp;
-// use sparkfun_pro_micro_rp2040 as bsp;
-
 use bsp::entry;
 use bsp::hal::clocks::{init_clocks_and_plls, Clock};
-use bsp::hal::gpio::{FunctionI2C, FunctionUart, PullNone, PullUp};
-use bsp::hal::i2c::I2C;
 use bsp::hal::pac;
-use bsp::hal::pwm::Slices;
 use bsp::hal::sio::Sio;
-use bsp::hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
 use bsp::hal::watchdog::Watchdog;
-use bsp::hal::Timer;
 use bsp::Pins;
-use servo::Servo;
-use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
+use cortex_m::delay::Delay;
+use rp_pico as bsp;
 
 mod rfid_flasher;
 
-#[link(name = "jartis")]
-extern "C" {
-    pub fn connectToWifi() -> i32;
-}
+use rfid_flasher::rfid_flasher::rfid_flasher_main;
+
+// #[link(name = "jartis")]
+// extern "C" {
+//     pub fn connectToWifi() -> i32;
+// }
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
@@ -54,7 +29,6 @@ const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 #[entry]
 fn main() -> ! {
-    info!("Program start");
     // Grab our singleton objects
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
@@ -77,7 +51,7 @@ fn main() -> ! {
     .unwrap();
 
     // Lets us wait for fixed periods of time
-    let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     // Set the pins to their default state
     let pins = Pins::new(
@@ -87,8 +61,12 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    #[cfg(target_feature = "rfid_flasher")]
-    rfid_flasher(pins);
+    let runtime = option_env!("PROGRAM");
+
+    match runtime {
+        Some("RFID_FLASHER") => rfid_flasher_main(pac.UART0, &mut pac.RESETS, clocks, pins, delay),
+        _ => loop {},
+    }
 
     // This is the correct pin on the Raspberry Pico board. On other boards, even if they have an
     // on-board LED, it might need to be changed.
@@ -99,75 +77,66 @@ fn main() -> ! {
     // If you have a Pico W and want to toggle a LED with a simple GPIO output pin, you can connect an external
     // LED to one of the GPIO pins, and reference that pin here. Don't forget adding an appropriate resistor
     // in series with the LED.
-    let uart_pins: UartPins = (
-        // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
-        pins.gpio0.reconfigure::<FunctionUart, PullNone>(),
-        // UART RX (characters received by RP2040) on pin 2 (GPIO1)
-        pins.gpio1.reconfigure::<FunctionUart, PullNone>(),
-    );
-
-    // Make a UART on the given pins
-    let mut uart: Uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
-        .enable(
-            UartConfig::new(9600.Hz(), DataBits::Eight, None, StopBits::One),
-            clocks.peripheral_clock.freq(),
-        )
-        .unwrap();
+    //
+    // // Make a UART on the given pins
 
     // let connection_attempt = unsafe { connectToWifi() };
 
     // Init PWMs
-    let mut pwm_slices = Slices::new(pac.PWM, &mut pac.RESETS);
+    // let mut pwm_slices = Slices::new(pac.PWM, &mut pac.RESETS);
 
     // Configure PWM0
-    let pwm = &mut pwm_slices.pwm0;
-    pwm.set_ph_correct();
-    pwm.set_div_int(20u8); // 50 hz
-    pwm.enable();
+    // let pwm = &mut pwm_slices.pwm0;
+    // pwm.set_ph_correct();
+    // pwm.set_div_int(20u8); // 50 hz
+    // pwm.enable();
 
     // Reset GPIO15 for a button to read input
-    let mut button_pin = pins.gpio15.into_pull_down_input();
-
-    // Output channel B on PWM0 to the GPIO17 pin
-    let channel = &mut pwm.channel_b;
-    channel.output_to(pins.gpio17);
-
-    let mut servo = Servo::new(channel);
-
-    // Reset the servo
-    writeln!(uart, "Resetting the servo").unwrap();
-    servo.set_minimum_angle().unwrap();
+    // let mut button_pin = pins.gpio15.into_pull_down_input();
+    //
+    // // Output channel B on PWM0 to the GPIO17 pin
+    // let channel = &mut pwm.channel_b;
+    // channel.output_to(pins.gpio17);
+    //
+    // let mut servo = Servo::new(channel);
+    //
+    // // Reset the servo
+    // writeln!(uart, "Resetting the servo").unwrap();
+    // servo.set_minimum_angle().unwrap();
 
     // Infinite loop, moving micro servo from one position to another.
     // You may need to adjust the pulse width since several servos from
     // different manufacturers respond differently.
-    loop {
-        writeln!(uart, "Continuing...").unwrap();
-
-        let is_button_pressed = button_pin.is_high().unwrap_or(false);
-
-        if is_button_pressed {
-            // Move the servo
-            servo.set_maximum_angle().unwrap();
-            delay.delay_ms(2000);
-        } else {
-            servo.set_minimum_angle().unwrap();
-        }
-
-        delay.delay_ms(50);
-    }
+    // loop {
+    //     writeln!(uart, "Continuing...").unwrap();
+    //
+    //     let is_button_pressed = button_pin
+    //         .into_push_pull_output()
+    //         .is_high()
+    //         .unwrap_or(false);
+    //
+    //     if is_button_pressed {
+    //         // Move the servo
+    //         servo.set_maximum_angle().unwrap();
+    //         delay.delay_ms(2000);
+    //     } else {
+    //         servo.set_minimum_angle().unwrap();
+    //     }
+    //
+    //     delay.delay_ms(50);
+    // }
 
     // Write something to the UART on start-up so we can check the output pin
     // is wired correctly.
 
-    let mut i2c: I2CHandler = I2C::i2c0(
-        pac.I2C0,
-        pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
-        pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
-        400.kHz(),
-        &mut pac.RESETS,
-        125_000_000.Hz(),
-    );
+    // let mut i2c: I2CHandler = I2C::i2c0(
+    //     pac.I2C0,
+    //     pins.gpio8.reconfigure::<FunctionI2C, PullUp>(), // sda
+    //     pins.gpio9.reconfigure::<FunctionI2C, PullUp>(), // scl
+    //     400.kHz(),
+    //     &mut pac.RESETS,
+    //     125_000_000.Hz(),
+    // );
 
     // let declination = 12.64; // Brisbane
     // let mut magnetometer = PiicoDevQMC6310::new(None, Some(GaussRange::Gauss1200), declination);
