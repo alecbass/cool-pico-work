@@ -18,6 +18,8 @@
           pkg-config
         ];
 
+        RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
+
         buildInputs = with pkgs; [
           clang-tools
           cmake
@@ -26,9 +28,9 @@
           # Compilation
 
           # Rust build dependencies
-          # cargo
-          # rustc
-          # rustup
+          cargo
+          rustc
+          rustup
 
           gcc-arm-embedded-13
 
