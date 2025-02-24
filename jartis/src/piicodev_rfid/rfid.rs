@@ -48,10 +48,10 @@ impl PiicoDevRfid {
         let mut read_buffer = [0; 1];
 
         let address = I2C_ADDRESS;
-        // self.i2c.write(address, &[register])?;
-        // self.i2c.read(address, &mut read_buffer)?;
-        self.i2c
-            .write_read(address, &[register], &mut read_buffer)?;
+        self.i2c.write(address, &[register])?;
+        self.i2c.read(address, &mut read_buffer)?;
+        // self.i2c
+        //     .write_read(address, &[register], &mut read_buffer)?;
 
         Ok(read_buffer[0])
     }
@@ -108,16 +108,14 @@ impl PiicoDevRfid {
         let address = I2C_ADDRESS;
         self.i2c.write(address, &[REG_COMMAND, CMD_IDLE])?; // Stop any active command.
         self.i2c.write(address, &[REG_COM_IRQ, 0x7F])?; // Clear all seven interrupt request bits
-        writeln!(uart, "before to_card {} {}", address, REG_FIFO_LEVEL).unwrap();
         self.set_register_flags(REG_FIFO_LEVEL, 0x80)?; // FlushBuffer = 1, FIFO initialization
-        writeln!(uart, "to_card").unwrap();
         self.write_to_fifo(REG_FIFO_DATA, send)?; // Write to the FIFO
-                                                  //
+
         if cmd == CMD_TRANCEIVE {
             self.set_register_flags(REG_BIT_FRAMING, 0x00)?; // This starts the transceive operation
         }
 
-        self.i2c.write(REG_COMMAND, &[cmd])?;
+        self.i2c.write(address, &[REG_COMMAND, cmd])?;
 
         if cmd == CMD_TRANCEIVE {
             self.set_register_flags(REG_BIT_FRAMING, 0x80)?; // This starts the transceive operation
@@ -184,7 +182,8 @@ impl PiicoDevRfid {
 
     /// Use the co-processor on the RFID module to obtain CRC
     pub fn crc(&mut self, data: &[u8]) -> Result<[u8; 2], i2c::Error> {
-        self.i2c.write(REG_COMMAND, &[CMD_IDLE])?;
+        let address = I2C_ADDRESS;
+        self.i2c.write(address, &[REG_COMMAND, CMD_IDLE])?;
         self.clear_register_flags(REG_DIV_IRQ, 0x04)?;
         self.set_register_flags(REG_FIFO_LEVEL, 0x80)?;
 
@@ -212,7 +211,8 @@ impl PiicoDevRfid {
 
     /// Invites tag in state IDLE to go to READY
     fn request(&mut self, mode: u8, uart: &mut Uart) -> Result<(u8, usize), i2c::Error> {
-        self.i2c.write(REG_BIT_FRAMING, &[0x07])?;
+        let address = I2C_ADDRESS;
+        self.i2c.write(address, &[REG_BIT_FRAMING, 0x07])?;
         let (mut stat, _recv, bits) = self.to_card(CMD_TRANCEIVE, &[mode], uart)?;
 
         if (stat != OK) | (bits != 0x10) {

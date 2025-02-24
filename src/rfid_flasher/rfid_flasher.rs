@@ -72,10 +72,15 @@ pub fn rfid_flasher_main(
     loop {
         delay.delay_ms(500);
 
-        if let Err(e) = rfid.read_tag_id(&mut uart) {
+        writeln!(uart, "Reading tag...").unwrap();
+        let tag = rfid.read_tag_id(&mut uart);
+
+        if let Ok(ref tag) = tag {
+            writeln!(uart, "Tag found: {}", tag.success).unwrap();
+        }
+
+        if let Err(ref e) = tag {
             writeln!(uart, "Presence error: {:?}", e).unwrap();
-        } else {
-            writeln!(uart, "RFID worked").unwrap();
         }
     }
 
