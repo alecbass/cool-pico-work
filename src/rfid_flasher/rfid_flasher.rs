@@ -4,6 +4,7 @@ use cortex_m::delay::Delay;
 use embedded_hal::digital::InputPin;
 use fugit::RateExtU32;
 use jartis::i2c::I2CHandler;
+use jartis::piicodev_rfid::rfid::PiicoDevRfid;
 use jartis::piicodev_ssd1306::PiicoDevSSD1306;
 use jartis::uart::{Uart, UartPins};
 use rp_pico::hal::clocks::ClocksManager;
@@ -60,6 +61,23 @@ pub fn rfid_flasher_main(
         resets,
         125_000_000.Hz(),
     );
+
+    let mut rfid = PiicoDevRfid::new(i2c);
+    let init = rfid.init(&mut delay);
+
+    if let Err(e) = init {
+        writeln!(uart, "RFID Initialisation error: {:?}", e).unwrap();
+    }
+
+    loop {
+        delay.delay_ms(500);
+
+        if let Err(e) = rfid.read_tag_id(&mut uart) {
+            writeln!(uart, "Presence error: {:?}", e).unwrap();
+        } else {
+            writeln!(uart, "RFID worked").unwrap();
+        }
+    }
 
     let mut oled = PiicoDevSSD1306::new(i2c);
 

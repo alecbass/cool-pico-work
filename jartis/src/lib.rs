@@ -50,6 +50,7 @@ pub mod i2c;
 pub mod piicodev_bme280;
 pub mod piicodev_buzzer;
 pub mod piicodev_qmc6310;
+pub mod piicodev_rfid;
 pub mod piicodev_rgb;
 pub mod piicodev_ssd1306;
 pub mod piicodev_vl53l1x;

@@ -11,3 +11,7 @@ PIN setup:
 * GND -> GND (Marked with -)
 * GPIO8 I2C0 SDA -> SDA
 * GPIO9 I2C0 SCL -> SCL
+
+# Pico -> PiicoDev RFID
+VSYS -> +3V3
+GND -> GND
