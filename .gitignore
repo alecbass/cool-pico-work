@@ -1,4 +1,5 @@
 /target
+/jartis/target
 
 build.sh
 .vscode
