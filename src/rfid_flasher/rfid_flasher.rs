@@ -62,17 +62,18 @@ pub fn rfid_flasher_main(
         125_000_000.Hz(),
     );
 
+    writeln!(uart, "Initialising RFID...").unwrap();
     let mut rfid = PiicoDevRfid::new(i2c);
     let init = rfid.init(&mut delay);
 
     if let Err(e) = init {
         writeln!(uart, "RFID Initialisation error: {:?}", e).unwrap();
+        panic!("Closing...");
     }
 
     loop {
-        delay.delay_ms(500);
+        delay.delay_ms(10);
 
-        writeln!(uart, "Reading tag...").unwrap();
         let tag = rfid.read_tag_id(&mut uart);
 
         if let Ok(ref tag) = tag {

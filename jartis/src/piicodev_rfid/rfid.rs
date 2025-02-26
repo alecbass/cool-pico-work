@@ -48,10 +48,10 @@ impl PiicoDevRfid {
         let mut read_buffer = [0; 1];
 
         let address = I2C_ADDRESS;
-        self.i2c.write(address, &[register])?;
-        self.i2c.read(address, &mut read_buffer)?;
-        // self.i2c
-        //     .write_read(address, &[register], &mut read_buffer)?;
+        // self.i2c.write(address, &[register])?;
+        // self.i2c.read(address, &mut read_buffer)?;
+        self.i2c
+            .write_read(address, &[register], &mut read_buffer)?;
 
         Ok(read_buffer[0])
     }
@@ -59,7 +59,19 @@ impl PiicoDevRfid {
     /// I2C write to FIFO buffer
     fn write_to_fifo(&mut self, reg: u8, value: &[u8]) -> Result<(), i2c::Error> {
         let address = I2C_ADDRESS;
-        self.i2c.write(address, &[reg, value[0]])
+
+        let reg_array = [reg];
+        let bytes_iter = [&reg_array, value].into_iter().flatten().map(|byte| *byte);
+
+        // let mut buffer = [0; 256];
+        // buffer[0] = reg;
+        //
+        // for i in 0..value.len() {
+        //     buffer[i + 1] = value[i];
+        // }
+
+        self.i2c.write_iter(address, bytes_iter)
+        // self.i2c.write(address, &buffer)
     }
 
     fn set_register_flags(&mut self, register: u8, mask: u8) -> Result<(), i2c::Error> {
@@ -121,7 +133,7 @@ impl PiicoDevRfid {
             self.set_register_flags(REG_BIT_FRAMING, 0x80)?; // This starts the transceive operation
         }
 
-        let mut i = 20000; // 2000
+        let mut i = 2000; // 2000
 
         loop {
             n = self.read_reg_byte(REG_COM_IRQ)? as usize;
@@ -131,7 +143,7 @@ impl PiicoDevRfid {
                 break;
             }
 
-            if (n & 0x01) == 0x01 {
+            if (n & 0x01) != 0 {
                 break;
             }
 
@@ -214,6 +226,7 @@ impl PiicoDevRfid {
         let address = I2C_ADDRESS;
         self.i2c.write(address, &[REG_BIT_FRAMING, 0x07])?;
         let (mut stat, _recv, bits) = self.to_card(CMD_TRANCEIVE, &[mode], uart)?;
+        writeln!(uart, "{stat} {OK} {ERR}      {bits} {}", 0x10).unwrap();
 
         if (stat != OK) | (bits != 0x10) {
             stat = ERR
@@ -231,9 +244,12 @@ impl PiicoDevRfid {
         let mut ser_chk = 0;
         let ser = [anti_col_n, 0x20];
 
-        self.i2c.write(REG_BIT_FRAMING, &[0x00])?;
+        let address = I2C_ADDRESS;
+        self.i2c.write(address, &[REG_BIT_FRAMING, 0x00])?;
 
         let (mut stat, recv, _bits) = self.to_card(CMD_TRANCEIVE, &ser, uart)?;
+
+        writeln!(uart, "{stat} {OK} {:?}", recv).unwrap();
 
         if stat == OK {
             if recv.len() == 5 {
