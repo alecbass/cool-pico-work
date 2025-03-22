@@ -1,35 +1,34 @@
 use core::fmt::Write;
 
 use cortex_m::delay::Delay;
-use embedded_hal::i2c::{I2c, Operation};
-
-use crate::piicodev_rfid::{
-    constants::{TAG_CMD_ANTCOL2, TAG_CMD_ANTCOL3},
-    types::{TagId, TagType},
-};
-use crate::uart::Uart;
+use embedded_hal::i2c::I2c;
 
 use super::constants::{
-    CMD_CALC_CRC, CMD_IDLE, CMD_MF_AUTHENT, CMD_SOFT_RESET, CMD_TRANCEIVE, ERR, I2C_ADDRESS,
-    NOTAGERR, OK, REG_BIT_FRAMING, REG_COMMAND, REG_COM_IRQ, REG_COM_I_EN, REG_CONTROL,
-    REG_CRC_RESULT_LSB, REG_CRC_RESULT_MSB, REG_DIV_IRQ, REG_DIV_I_EN, REG_ERROR, REG_FIFO_DATA,
-    REG_FIFO_LEVEL, REG_MODE, REG_TX_ASK, REG_TX_CONTROL, REG_T_MODE, REG_T_PRESCALER,
-    REG_T_RELOAD_HI, REG_T_RELOAD_LO, TAG_CMD_ANTCOL1, TAG_CMD_REQIDL,
+    CMD_CALC_CRC, CMD_IDLE, CMD_MF_AUTHENT, CMD_SOFT_RESET, CMD_TRANCEIVE, I2C_ADDRESS,
+    REG_BIT_FRAMING, REG_COMMAND, REG_COM_IRQ, REG_COM_I_EN, REG_CONTROL, REG_CRC_RESULT_LSB,
+    REG_CRC_RESULT_MSB, REG_DIV_IRQ, REG_DIV_I_EN, REG_ERROR, REG_FIFO_DATA, REG_FIFO_LEVEL,
+    REG_MODE, REG_TX_ASK, REG_TX_CONTROL, REG_T_MODE, REG_T_PRESCALER, REG_T_RELOAD_HI,
+    REG_T_RELOAD_LO, TAG_CMD_ANTCOL1, TAG_CMD_REQIDL,
+};
+use crate::{
+    piicodev_rfid::{
+        constants::{TAG_CMD_ANTCOL2, TAG_CMD_ANTCOL3},
+        types::{RfidStatus, TagDetectResult, TagId, TagType},
+    },
+    Uart,
 };
 
-// pub struct PiicoDevRfid {
-//     i2c: I2CHandler,
-// }
 pub struct PiicoDevRfid<I2C> {
     i2c: I2C,
+    uart: Uart,
 }
 
 impl<I2C> PiicoDevRfid<I2C>
 where
     I2C: I2c,
 {
-    pub fn new(i2c: I2C) -> Self {
-        Self { i2c }
+    pub fn new(i2c: I2C, uart: Uart) -> Self {
+        Self { i2c, uart }
     }
 
     pub fn init(&mut self, delay: &mut Delay) -> Result<(), I2C::Error> {
@@ -58,8 +57,8 @@ where
         let mut read_buffer = [0; 1];
 
         let address = I2C_ADDRESS;
-        self.i2c.write(address, &[register])?;
-        self.i2c.read(address, &mut read_buffer)?;
+        self.i2c
+            .write_read(address, &[register], &mut read_buffer)?;
 
         Ok(read_buffer[0])
     }
@@ -67,16 +66,21 @@ where
     /// I2C write to FIFO buffer
     fn write_to_fifo(&mut self, register: u8, value: &[u8]) -> Result<(), I2C::Error> {
         let address = I2C_ADDRESS;
+        let mut buffer = [0; 32];
+        buffer[0] = register;
 
-        self.i2c.transaction(
-            address,
-            &mut [Operation::Write(&[register]), Operation::Write(value)],
-        )
+        for (i, &byte) in value.iter().enumerate() {
+            let index = i + 1;
 
-        // let reg_array = [reg];
-        // let bytes_iter = [&reg_array, value].into_iter().flatten().map(|byte| *byte);
-        // self.i2c.write_iter(address, bytes_iter)
-        // self.i2c.write(address, &buffer)
+            if index < buffer.len() {
+                buffer[index] = byte;
+            }
+        }
+
+        // Write the register, plus the length of the provided array
+        let value_to_write = &buffer[0..value.len() + 1];
+        writeln!(self.uart, "Value: {value_to_write:?}").unwrap();
+        self.i2c.write(address, value_to_write)
     }
 
     fn set_register_flags(&mut self, register: u8, mask: u8) -> Result<(), I2C::Error> {
@@ -94,175 +98,156 @@ where
         self.write_reg_byte(REG_COMMAND, CMD_SOFT_RESET)
     }
 
-    /// Communicates with the tag
-    fn to_card(
-        &mut self,
-        cmd: u8,
-        send: &[u8],
-        uart: &mut Uart,
-    ) -> Result<(u8, [u8; 1024], usize), I2C::Error> {
-        let mut recv = [0; 1024];
-        let mut wait_irq = 0;
-        let mut irq_en = 0;
-        let mut bits: usize = 0;
-        let mut n: usize = 0;
-        let mut status = ERR;
+    // Communication with the tag
+    fn to_card(&mut self, cmd: u8, send: &[u8]) -> Result<(RfidStatus, [u8; 64], u16), I2C::Error> {
+        let mut recv: [u8; 64] = [0; 64];
+        let mut bits: u16 = 0;
+        let mut stat = RfidStatus::Error;
 
-        if cmd == CMD_MF_AUTHENT {
-            irq_en = 0x12;
-            wait_irq = 0x10;
-        } else if cmd == CMD_TRANCEIVE {
-            irq_en = 0x77;
-            wait_irq = 0x30;
-        }
+        let (irq_en, wait_irq) = match cmd {
+            CMD_MF_AUTHENT => (0x12, 0x10),
+            CMD_TRANCEIVE => (0x77, 0x30),
+            _ => (0x00, 0x00),
+        };
 
-        self.write_reg_byte(REG_COMMAND, CMD_IDLE)?; // Stop any active command.
-        self.write_reg_byte(REG_COM_IRQ, 0x7F)?; // Clear all seven interrupt request bits
-        self.set_register_flags(REG_FIFO_LEVEL, 0x80)?; // FlushBuffer = 1, FIFO initialization
-        self.write_to_fifo(REG_FIFO_DATA, send)?; // Write to the FIFO
+        // Stop any active command
+        self.write_reg_byte(REG_COMMAND, CMD_IDLE)?;
+        // Clear all interrupt request bits
+        self.write_reg_byte(REG_COM_IRQ, 0x7F)?;
+        // FlushBuffer = 1, FIFO initialization
+        self.set_register_flags(REG_FIFO_LEVEL, 0x80)?;
+        // Write to the FIFO
+        self.write_to_fifo(REG_FIFO_DATA, send)?;
 
         if cmd == CMD_TRANCEIVE {
-            self.set_register_flags(REG_BIT_FRAMING, 0x00)?; // This starts the transceive operation
+            // This starts the transceive operation
+            self.clear_register_flags(REG_BIT_FRAMING, 0x80)?;
         }
 
         self.write_reg_byte(REG_COMMAND, cmd)?;
 
         if cmd == CMD_TRANCEIVE {
-            self.set_register_flags(REG_BIT_FRAMING, 0x80)?; // This starts the transceive operation
+            // This starts the transceive operation
+            self.set_register_flags(REG_BIT_FRAMING, 0x80)?;
         }
 
-        let mut i = 20000; // 2000
+        // Wait for completion
+        let mut i = 20000; // Timeout counter
+        let mut n = 0;
 
-        loop {
-            n = self.read_reg_byte(REG_COM_IRQ)? as usize;
+        while i > 0 {
+            n = self.read_reg_byte(REG_COM_IRQ)?;
+            if n & wait_irq != 0 {
+                break;
+            }
+            if n & 0x01 != 0 {
+                break;
+            }
             i -= 1;
-
-            if (n & wait_irq) != 0 {
-                break;
-            }
-
-            if (n & 0x01) != 0 {
-                break;
-            }
-
-            if i == 0 {
-                break;
-            }
         }
 
+        // Stop the transceive operation
         self.clear_register_flags(REG_BIT_FRAMING, 0x80)?;
 
-        // writeln!(
-        //     uart,
-        //     "cmd:   {cmd}   i: {i}   irq_en: {irq_en}   wait_irq: {wait_irq}    n: {n}     {}",
-        //     n & wait_irq
-        // )
-        // .unwrap();
-
+        writeln!(self.uart, "{i} {send:?} {n}").unwrap();
         if i > 0 {
-            let read = self.read_reg_byte(REG_ERROR)?;
+            if (self.read_reg_byte(REG_ERROR)? & 0x1B) == 0x00 {
+                stat = RfidStatus::Ok;
 
-            if (read & 0x1B) == 0x00 {
-                status = OK;
-
-                if (n & irq_en & 0x01) == 0x01 {
-                    status = NOTAGERR;
+                if n & irq_en & 0x01 != 0 {
+                    stat = RfidStatus::NoTag;
                 } else if cmd == CMD_TRANCEIVE {
-                    n = self.read_reg_byte(REG_FIFO_LEVEL)? as usize;
-                    let lbits: usize = (self.read_reg_byte(REG_CONTROL)? as usize) & 0x07;
+                    let n = self.read_reg_byte(REG_FIFO_LEVEL)?;
+                    let lbits = self.read_reg_byte(REG_CONTROL)? & 0x07;
 
                     if lbits != 0 {
-                        bits = (n - 1) * 8 + lbits
+                        bits = ((n - 1) as u16) * 8 + lbits as u16;
                     } else {
-                        bits = n * 8
+                        bits = (n as u16) * 8;
                     }
 
-                    if n == 0 {
-                        n = 1
+                    let read_count = if n == 0 {
+                        1
                     } else if n > 16 {
-                        n = 16
-                    }
+                        16
+                    } else {
+                        n
+                    };
 
-                    for i in 0..n {
-                        let read = self.read_reg_byte(REG_FIFO_DATA)?;
-                        recv[i] = read;
-                        // recv.append(self.read_reg_byte(_REG_FIFO_DATA)?)
+                    for i in 0..read_count {
+                        let val = self.read_reg_byte(REG_FIFO_DATA)?;
+                        recv[i as usize] = val;
                     }
                 }
             } else {
-                status = ERR;
+                stat = RfidStatus::Error;
             }
         }
 
-        Ok((status, recv, bits))
+        Ok((stat, recv, bits))
     }
 
-    /// Use the co-processor on the RFID module to obtain CRC
-    pub fn crc(&mut self, data: &[u8]) -> Result<[u8; 2], I2C::Error> {
+    // Calculate CRC using the coprocessor
+    fn calculate_crc(&mut self, data: &[u8]) -> Result<[u8; 2], I2C::Error> {
         self.write_reg_byte(REG_COMMAND, CMD_IDLE)?;
         self.clear_register_flags(REG_DIV_IRQ, 0x04)?;
         self.set_register_flags(REG_FIFO_LEVEL, 0x80)?;
 
-        for c in data {
-            self.write_reg_byte(REG_FIFO_DATA, *c)?;
+        for &byte in data {
+            self.write_reg_byte(REG_FIFO_DATA, byte)?;
         }
 
         self.write_reg_byte(REG_COMMAND, CMD_CALC_CRC)?;
 
-        let mut i: u8 = 0xFF;
+        // Wait for CRC calculation to complete
+        let mut i = 0xFF;
         loop {
             let n = self.read_reg_byte(REG_DIV_IRQ)?;
             i -= 1;
-            if !((i != 0) && (n & 0x04) == 0) {
+            if i == 0 || n & 0x04 != 0 {
                 break;
             }
         }
 
         self.write_reg_byte(REG_COMMAND, CMD_IDLE)?;
-        Ok([
-            self.read_reg_byte(REG_CRC_RESULT_LSB)?,
-            self.read_reg_byte(REG_CRC_RESULT_MSB)?,
-        ])
+
+        let result_lsb = self.read_reg_byte(REG_CRC_RESULT_LSB)?;
+        let result_msb = self.read_reg_byte(REG_CRC_RESULT_MSB)?;
+
+        Ok([result_lsb, result_msb])
     }
 
-    /// Invites tag in state IDLE to go to READY
-    fn request(&mut self, mode: u8, uart: &mut Uart) -> Result<(u8, usize), I2C::Error> {
+    // Request tag to go to READY state
+    fn request(&mut self, mode: u8) -> Result<(RfidStatus, u16), I2C::Error> {
         self.write_reg_byte(REG_BIT_FRAMING, 0x07)?;
-        let (mut stat, _recv, bits) = self.to_card(CMD_TRANCEIVE, &[mode], uart)?;
-        writeln!(uart, "Status: {stat}     Bits: {bits} {}", 0x10).unwrap();
+        let (stat, _recv, bits) = self.to_card(CMD_TRANCEIVE, &[mode])?;
 
-        if (stat != OK) | (bits != 0x10) {
-            stat = ERR
+        if stat != RfidStatus::Ok || bits != 0x10 {
+            return Ok((RfidStatus::Error, bits));
         }
 
         Ok((stat, bits))
     }
 
-    /// Perform anticollision check
-    fn anti_collision_check(
-        &mut self,
-        anti_col_n: u8,
-        uart: &mut Uart,
-    ) -> Result<(u8, [u8; 1024]), I2C::Error> {
-        let mut ser_chk = 0;
-        let ser = [anti_col_n, 0x20];
-
+    // Perform anticollision check
+    fn anticoll(&mut self, anticol_n: u8) -> Result<(RfidStatus, [u8; 64]), I2C::Error> {
+        let ser = [anticol_n, 0x20];
         self.write_reg_byte(REG_BIT_FRAMING, 0x00)?;
 
-        let (mut stat, recv, _bits) = self.to_card(CMD_TRANCEIVE, &ser, uart)?;
+        let (stat, recv, _bits) = self.to_card(CMD_TRANCEIVE, &ser)?;
 
-        writeln!(uart, "{stat} {OK} {:?}", recv).unwrap();
-
-        if stat == OK {
+        if stat == RfidStatus::Ok {
             if recv.len() == 5 {
-                for i in 0..4 {
-                    ser_chk = ser_chk ^ recv[i];
+                let mut ser_chk = 0;
+                for &byte in recv.iter().take(4) {
+                    ser_chk ^= byte;
                 }
+
                 if ser_chk != recv[4] {
-                    stat = ERR;
+                    return Ok((RfidStatus::Error, recv));
                 }
             } else {
-                stat = ERR;
+                return Ok((RfidStatus::Error, recv));
             }
         }
 
@@ -270,136 +255,136 @@ where
     }
 
     /// Select the desired tag
-    fn select_tag(
-        &mut self,
-        ser_num: &[u8],
-        anti_col_n: u8,
-        uart: &mut Uart,
-    ) -> Result<u8, I2C::Error> {
+    fn select_tag(&mut self, ser_num: &[u8], anti_col_n: u8) -> Result<bool, I2C::Error> {
         let mut buf = [0; 64];
-
         buf[0] = anti_col_n;
         buf[1] = 0x70;
 
         let mut index: usize = 2;
 
         for i in ser_num {
-            buf[*i as usize] = *i;
-            index = *i as usize;
+            buf[index] = *i;
+            index += 1;
         }
 
-        let p_out = self.crc(&buf)?;
+        let p_out = self.calculate_crc(&buf)?;
         buf[index] = p_out[0];
         buf[index + 1] = p_out[1];
 
-        let (status, _back_data, back_len) = self.to_card(0x0C, &buf, uart)?;
-        if status == OK && back_len == 0x18 {
-            return Ok(1);
+        let (status, _back_data, back_len) = self.to_card(CMD_TRANCEIVE, &buf)?;
+
+        if status == RfidStatus::Ok && back_len == 0x18 {
+            return Ok(true);
         }
 
-        Ok(0)
+        Ok(false)
     }
 
-    /// Returns detailed information about the tag
-    fn read_tag_id_private(&mut self, uart: &mut Uart) -> Result<TagId, I2C::Error> {
-        let result = TagId {
-            success: false,
-            id_integers: [0; 1024],
-            id_formatted: [0; 1024],
-            tag_type: TagType::Classic,
-        };
-        let mut valid_uid = [0; 1024];
-        let (status, uid) = self.anti_collision_check(TAG_CMD_ANTCOL1, uart)?;
+    // Read tag ID
+    fn read_tag_id_private(&mut self) -> Result<TagId, I2C::Error> {
+        let mut result = TagId::default();
+        let mut valid_uid: [u8; 16] = [0; 16];
 
-        if status != OK {
+        let (status, uid) = self.anticoll(TAG_CMD_ANTCOL1)?;
+        if status != RfidStatus::Ok {
             return Ok(result);
         }
 
-        if self.select_tag(&uid, TAG_CMD_ANTCOL1, uart)? == 0 {
+        if !self.select_tag(&uid, TAG_CMD_ANTCOL1)? {
             return Ok(result);
         }
 
-        if uid[0] == 0x88 {
+        let mut valid_uid_index = 1;
+
+        if uid.len() > 0 && uid[0] == 0x88 {
             // NTAG
             for i in 1..4 {
-                valid_uid[i - 1] = uid[i];
+                if i < uid.len() {
+                    valid_uid[valid_uid_index] = uid[i];
+                    valid_uid_index += 1;
+                }
             }
 
-            let (status, uid) = self.anti_collision_check(TAG_CMD_ANTCOL2, uart)?;
-
-            if status != OK {
+            let (status, uid) = self.anticoll(TAG_CMD_ANTCOL2)?;
+            if status != RfidStatus::Ok {
                 return Ok(result);
             }
 
-            let rtn = self.select_tag(&uid, TAG_CMD_ANTCOL2, uart)?;
-
-            if rtn == 0 {
+            let rtn = self.select_tag(&uid, TAG_CMD_ANTCOL2)?;
+            if !rtn {
                 return Ok(result);
             }
 
-            // Now check again if uid[0] is 0x88
-            if uid[0] == 0x88 {
+            if uid.len() > 0 && uid[0] == 0x88 {
                 for i in 1..4 {
-                    valid_uid[i + 4] = uid[i];
+                    if i < uid.len() {
+                        valid_uid[valid_uid_index] = uid[i];
+                        valid_uid_index += 1;
+                    }
                 }
 
-                let (status, _uid) = self.anti_collision_check(TAG_CMD_ANTCOL3, uart)?;
-
-                if status != OK {
+                let (status, uid) = self.anticoll(TAG_CMD_ANTCOL3)?;
+                if status != RfidStatus::Ok {
                     return Ok(result);
                 }
             }
         }
 
         for i in 0..5 {
-            valid_uid[i + 8] = uid[i];
+            if i < uid.len() {
+                valid_uid[valid_uid_index] = uid[i];
+                valid_uid_index += 1;
+            }
         }
 
-        // Format the ID into a string
-        let id_formatted = [0; 1024];
+        // Format ID
+        let id = valid_uid.iter().take(valid_uid.len().saturating_sub(1));
+        let mut id_formatted: [u8; 64] = [0; 64];
+        let mut id_formatted_index = 0;
 
-        // TODO: Format this into a string
-        let uid_length = uid.len();
-        // for i in 0..uid_length {
-        //     if i > 0 {
-        //         id_formatted
-        //     }
-        // }
+        for (i, &byte) in id.enumerate() {
+            if i > 0 {
+                id_formatted[id_formatted_index] = b':';
+                id_formatted_index += 1;
+            }
 
-        // id = valid_uid[:len(valid_uid)-1]
-        // for i in range(0,len(id)):
-        //     if i > 0:
-        //         id_formatted = id_formatted + ':'
-        //     if id[i] < 16:
-        //         id_formatted = id_formatted + '0'
-        //     id_formatted = id_formatted + hex(id[i])[2:]
-        //
-        let tag_type = match uid_length {
-            4 => TagType::Classic,
-            _ => TagType::NTag,
+            if byte < 16 {
+                id_formatted[id_formatted_index] = b'0';
+                id_formatted_index += 1;
+            }
+
+            id_formatted[id_formatted_index] = byte;
+            id_formatted_index += 1;
+        }
+
+        let tag_type = if valid_uid.len() <= 5 {
+            TagType::Classic
+        } else {
+            TagType::NTag
         };
 
-        Ok(TagId {
-            success: true,
-            id_integers: uid,
-            id_formatted,
-            tag_type,
-        })
+        // Create result
+        result.success = true;
+        result.id_integers = valid_uid;
+        result.id_formatted = id_formatted;
+        result.tag_type = tag_type;
+
+        Ok(result)
     }
 
     /// Detect the presence of a tag
-    fn detect_tag(&mut self, uart: &mut Uart) -> Result<(bool, usize), I2C::Error> {
-        let (stat, atqa) = self.request(TAG_CMD_REQIDL, uart)?;
-        let present = stat == OK;
+    fn detect_tag(&mut self) -> Result<TagDetectResult, I2C::Error> {
+        let (stat, atqa) = self.request(TAG_CMD_REQIDL)?;
+        let present = stat == RfidStatus::Ok;
 
-        Ok((present, atqa))
+        Ok(TagDetectResult { present, atqa })
     }
 
     // Turns the antenna on
     fn antenna_on(&mut self) -> Result<(), I2C::Error> {
         let read = self.read_reg_byte(REG_TX_CONTROL)?;
 
-        if !(read & 0x03) != 0 {
+        if read & 0x03 == 0 {
             return self.set_register_flags(REG_TX_CONTROL, 0x83);
         }
 
@@ -410,7 +395,7 @@ where
     fn anntenna_off(&mut self) -> Result<(), I2C::Error> {
         let read = self.read_reg_byte(REG_TX_CONTROL)?;
 
-        if !(read & 0x03) == 0 {
+        if read & 0x03 != 0 {
             return self.clear_register_flags(REG_TX_CONTROL, b'\x03');
         }
 
@@ -423,27 +408,26 @@ where
 
     /// Stand-alone function that puts the tag into the correct state
     /// Returns detailed information about the tag
-    pub fn read_tag_id(&mut self, uart: &mut Uart) -> Result<TagId, I2C::Error> {
-        let (mut present, _) = self.detect_tag(uart)?;
-        if !present {
+    pub fn read_tag_id(&mut self) -> Result<TagId, I2C::Error> {
+        let mut detection = self.detect_tag()?;
+        if !detection.present {
             // Try again, the card may not be in the correct state
-            (present, _) = self.detect_tag(uart)?;
+            detection = self.detect_tag()?;
         }
 
-        if !present {
-            return Ok(TagId {
-                success: false,
-                id_integers: [0; 1024],
-                id_formatted: [0; 1024],
-                tag_type: TagType::Classic,
-            });
+        writeln!(self.uart, "{:?}", detection);
+
+        if !detection.present {
+            return Ok(TagId::default());
         }
 
-        self.read_tag_id_private(uart)
+        let result = self.read_tag_id_private();
+        // writeln!(self.uart, "Tag found: {:?}", result).unwrap();
+        result
     }
 
     /// Wrapper for readTagID
-    pub fn is_tag_present(&mut self, uart: &mut Uart) -> Result<bool, I2C::Error> {
-        Ok(self.read_tag_id(uart)?.success)
+    pub fn is_tag_present(&mut self) -> Result<bool, I2C::Error> {
+        Ok(self.read_tag_id()?.success)
     }
 }

@@ -63,59 +63,57 @@ pub fn rfid_flasher_main(
     );
 
     writeln!(uart, "Initialising RFID...").unwrap();
-    let mut rfid = PiicoDevRfid::new(i2c);
+    let mut rfid = PiicoDevRfid::new(i2c, uart);
     let init = rfid.init(&mut delay);
 
     if let Err(e) = init {
-        writeln!(uart, "RFID Initialisation error: {:?}", e).unwrap();
+        // writeln!(uart, "RFID Initialisation error: {:?}", e).unwrap();
         panic!("Closing...");
     }
 
     loop {
-        delay.delay_ms(100);
+        delay.delay_ms(250);
 
-        let Ok(tag) = rfid.read_tag_id(&mut uart) else {
-            writeln!(uart, "Presence error").unwrap();
+        let Ok(tag) = rfid.read_tag_id() else {
+            // writeln!(uart, "Presence error").unwrap();
             continue;
         };
-
-        writeln!(uart, "Tag found: {}", tag.success).unwrap();
     }
 
-    let mut oled = PiicoDevSSD1306::new(i2c);
-
-    // if let Err(()) = oled.reset() {
+    // let mut oled = PiicoDevSSD1306::new(i2c);
+    //
+    // // if let Err(()) = oled.reset() {
+    // //     writeln!(uart, "OLED error").unwrap();
+    // // }
+    // if let Err(()) = oled.write_text("Man this RFID guy...") {
     //     writeln!(uart, "OLED error").unwrap();
     // }
-    if let Err(()) = oled.write_text("Man this RFID guy...") {
-        writeln!(uart, "OLED error").unwrap();
-    }
-
-    let mut state = State::new();
-    let mut button_pin = pins.gpio15.into_pull_down_input();
-
-    // If this is true, the next iterations of the loop won't toggle the state's mode between
-    // reading or writing until it is set to false again (when the button is lifted)
-    let mut is_holding_toggle_button = false;
-
-    // Blink the LED at 1 Hz
-    loop {
-        // Swap the state if the button has been pressed
-        let is_button_pressed = button_pin.is_high().unwrap_or(false);
-        let should_toggle = is_button_pressed && !is_holding_toggle_button;
-
-        if should_toggle {
-            // Toggle to the other mode and mark the button as being held so it doesn't keep toggling
-            is_holding_toggle_button = true;
-            state.toggle_mode();
-            if let Err(()) = update_oled(&state, &mut oled) {
-                writeln!(uart, "OLED error").unwrap();
-            }
-        } else if !is_button_pressed {
-            // Release the button so it can be toggled upon the next press
-            is_holding_toggle_button = false;
-        }
-
-        delay.delay_ms(50);
-    }
+    //
+    // let mut state = State::new();
+    // let mut button_pin = pins.gpio15.into_pull_down_input();
+    //
+    // // If this is true, the next iterations of the loop won't toggle the state's mode between
+    // // reading or writing until it is set to false again (when the button is lifted)
+    // let mut is_holding_toggle_button = false;
+    //
+    // // Blink the LED at 1 Hz
+    // loop {
+    //     // Swap the state if the button has been pressed
+    //     let is_button_pressed = button_pin.is_high().unwrap_or(false);
+    //     let should_toggle = is_button_pressed && !is_holding_toggle_button;
+    //
+    //     if should_toggle {
+    //         // Toggle to the other mode and mark the button as being held so it doesn't keep toggling
+    //         is_holding_toggle_button = true;
+    //         state.toggle_mode();
+    //         if let Err(()) = update_oled(&state, &mut oled) {
+    //             writeln!(uart, "OLED error").unwrap();
+    //         }
+    //     } else if !is_button_pressed {
+    //         // Release the button so it can be toggled upon the next press
+    //         is_holding_toggle_button = false;
+    //     }
+    //
+    //     delay.delay_ms(50);
+    // }
 }

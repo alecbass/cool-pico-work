@@ -2,7 +2,7 @@
   description = "Cool Raspberri Pi Pico Work";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-24.11";
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
   };
 
   outputs = inputs@{ self, nixpkgs }: let
@@ -48,6 +48,8 @@
           libusb1
           udev
           minicom
+
+          neovim
         ]
         ++ nixpkgs.lib.optionals (pkgs.stdenv.isDarwin) [
           libiconv
