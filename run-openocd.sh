@@ -4,7 +4,7 @@
 
 if [[ -d openocd/tcl ]]; then
     # Running from the project root directory
-    cd openocd/tcl
+    cd openocd || exit 1
 fi
 
 # cd openocd && src/openocd -f interface/cmsis-dap.cfg -c 'adapter speed 5000' -f target/rp2040.cfg -s tcl

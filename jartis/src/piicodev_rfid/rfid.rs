@@ -1,10 +1,8 @@
 use core::fmt::Write;
 
 use cortex_m::delay::Delay;
-use embedded_hal::i2c::I2c;
-use rp_pico::hal::{i2c, I2C};
+use embedded_hal::i2c::{I2c, Operation};
 
-use crate::i2c::I2CHandler;
 use crate::piicodev_rfid::{
     constants::{TAG_CMD_ANTCOL2, TAG_CMD_ANTCOL3},
     types::{TagId, TagType},
@@ -19,80 +17,81 @@ use super::constants::{
     REG_T_RELOAD_HI, REG_T_RELOAD_LO, TAG_CMD_ANTCOL1, TAG_CMD_REQIDL,
 };
 
-pub struct PiicoDevRfid {
-    i2c: I2CHandler,
+// pub struct PiicoDevRfid {
+//     i2c: I2CHandler,
+// }
+pub struct PiicoDevRfid<I2C> {
+    i2c: I2C,
 }
 
-impl PiicoDevRfid {
-    pub fn new(i2c: I2CHandler) -> Self {
+impl<I2C> PiicoDevRfid<I2C>
+where
+    I2C: I2c,
+{
+    pub fn new(i2c: I2C) -> Self {
         Self { i2c }
     }
 
-    pub fn init(&mut self, delay: &mut Delay) -> Result<(), i2c::Error> {
+    pub fn init(&mut self, delay: &mut Delay) -> Result<(), I2C::Error> {
         self.reset()?;
         delay.delay_ms(50);
 
-        let address = I2C_ADDRESS;
-        self.i2c.write(address, &[REG_T_MODE, 0x80])?;
-        self.i2c.write(address, &[REG_T_PRESCALER, 0xA9])?;
-        self.i2c.write(address, &[REG_T_RELOAD_HI, 0x03])?;
-        self.i2c.write(address, &[REG_T_RELOAD_LO, 0xE8])?;
-        self.i2c.write(address, &[REG_TX_ASK, 0x40])?;
-        self.i2c.write(address, &[REG_MODE, 0x3D])?;
-        self.i2c.write(address, &[REG_DIV_I_EN, 0x80])?; // CMOS Logic for IRQ pin
-        self.i2c.write(address, &[REG_COM_I_EN, 0x20])?; // Allows the receiver interrupt request (RxIRq bit) to be propagated to pin IRQ
+        self.write_reg_byte(REG_T_MODE, 0x80)?;
+        self.write_reg_byte(REG_T_PRESCALER, 0xA9)?;
+        self.write_reg_byte(REG_T_RELOAD_HI, 0x03)?;
+        self.write_reg_byte(REG_T_RELOAD_LO, 0xE8)?;
+        self.write_reg_byte(REG_TX_ASK, 0x40)?;
+        self.write_reg_byte(REG_MODE, 0x3D)?;
+        self.write_reg_byte(REG_DIV_I_EN, 0x80)?; // CMOS Logic for IRQ pin
+        self.write_reg_byte(REG_COM_I_EN, 0x20)?; // Allows the receiver interrupt request (RxIRq bit) to be propagated to pin IRQ
         self.antenna_on()
     }
 
-    fn read_reg_byte(&mut self, register: u8) -> Result<u8, i2c::Error> {
+    /// Writes a byte to the register, based on the Arduino library at https://github.com/MakerSpaceLeiden/rfid/blob/master/src/MFRC522_i2c.cpp
+    fn write_reg_byte(&mut self, register: u8, byte: u8) -> Result<(), I2C::Error> {
+        let address = I2C_ADDRESS;
+        self.i2c.write(address, &[register, byte])
+    }
+
+    /// Reads a byte from the register, based on the Adruino library at https://github.com/MakerSpaceLeiden/rfid/blob/master/src/MFRC522_i2c.cpp
+    fn read_reg_byte(&mut self, register: u8) -> Result<u8, I2C::Error> {
         let mut read_buffer = [0; 1];
 
         let address = I2C_ADDRESS;
-        // self.i2c.write(address, &[register])?;
-        // self.i2c.read(address, &mut read_buffer)?;
-        self.i2c
-            .write_read(address, &[register], &mut read_buffer)?;
+        self.i2c.write(address, &[register])?;
+        self.i2c.read(address, &mut read_buffer)?;
 
         Ok(read_buffer[0])
     }
 
     /// I2C write to FIFO buffer
-    fn write_to_fifo(&mut self, reg: u8, value: &[u8]) -> Result<(), i2c::Error> {
+    fn write_to_fifo(&mut self, register: u8, value: &[u8]) -> Result<(), I2C::Error> {
         let address = I2C_ADDRESS;
 
-        let reg_array = [reg];
-        let bytes_iter = [&reg_array, value].into_iter().flatten().map(|byte| *byte);
+        self.i2c.transaction(
+            address,
+            &mut [Operation::Write(&[register]), Operation::Write(value)],
+        )
 
-        // let mut buffer = [0; 256];
-        // buffer[0] = reg;
-        //
-        // for i in 0..value.len() {
-        //     buffer[i + 1] = value[i];
-        // }
-
-        self.i2c.write_iter(address, bytes_iter)
+        // let reg_array = [reg];
+        // let bytes_iter = [&reg_array, value].into_iter().flatten().map(|byte| *byte);
+        // self.i2c.write_iter(address, bytes_iter)
         // self.i2c.write(address, &buffer)
     }
 
-    fn set_register_flags(&mut self, register: u8, mask: u8) -> Result<(), i2c::Error> {
-        let address = I2C_ADDRESS;
+    fn set_register_flags(&mut self, register: u8, mask: u8) -> Result<(), I2C::Error> {
         let current_value = self.read_reg_byte(register)?;
-
-        self.i2c.write(address, &[register, current_value | mask])
+        self.write_reg_byte(register, current_value | mask)
     }
 
-    fn clear_register_flags(&mut self, register: u8, mask: u8) -> Result<(), i2c::Error> {
-        let address = I2C_ADDRESS;
+    fn clear_register_flags(&mut self, register: u8, mask: u8) -> Result<(), I2C::Error> {
         let current_value = self.read_reg_byte(register)?;
-        self.i2c
-            .write(address, &[register, current_value & (!mask)])
+        self.write_reg_byte(register, current_value & (!mask))
     }
 
     /// Resets the RFID module
-    pub fn reset(&mut self) -> Result<(), i2c::Error> {
-        let address = I2C_ADDRESS;
-
-        self.i2c.write(address, &[REG_COMMAND, CMD_SOFT_RESET])
+    pub fn reset(&mut self) -> Result<(), I2C::Error> {
+        self.write_reg_byte(REG_COMMAND, CMD_SOFT_RESET)
     }
 
     /// Communicates with the tag
@@ -101,7 +100,7 @@ impl PiicoDevRfid {
         cmd: u8,
         send: &[u8],
         uart: &mut Uart,
-    ) -> Result<(u8, [u8; 1024], usize), i2c::Error> {
+    ) -> Result<(u8, [u8; 1024], usize), I2C::Error> {
         let mut recv = [0; 1024];
         let mut wait_irq = 0;
         let mut irq_en = 0;
@@ -117,9 +116,8 @@ impl PiicoDevRfid {
             wait_irq = 0x30;
         }
 
-        let address = I2C_ADDRESS;
-        self.i2c.write(address, &[REG_COMMAND, CMD_IDLE])?; // Stop any active command.
-        self.i2c.write(address, &[REG_COM_IRQ, 0x7F])?; // Clear all seven interrupt request bits
+        self.write_reg_byte(REG_COMMAND, CMD_IDLE)?; // Stop any active command.
+        self.write_reg_byte(REG_COM_IRQ, 0x7F)?; // Clear all seven interrupt request bits
         self.set_register_flags(REG_FIFO_LEVEL, 0x80)?; // FlushBuffer = 1, FIFO initialization
         self.write_to_fifo(REG_FIFO_DATA, send)?; // Write to the FIFO
 
@@ -127,19 +125,19 @@ impl PiicoDevRfid {
             self.set_register_flags(REG_BIT_FRAMING, 0x00)?; // This starts the transceive operation
         }
 
-        self.i2c.write(address, &[REG_COMMAND, cmd])?;
+        self.write_reg_byte(REG_COMMAND, cmd)?;
 
         if cmd == CMD_TRANCEIVE {
             self.set_register_flags(REG_BIT_FRAMING, 0x80)?; // This starts the transceive operation
         }
 
-        let mut i = 2000; // 2000
+        let mut i = 20000; // 2000
 
         loop {
             n = self.read_reg_byte(REG_COM_IRQ)? as usize;
             i -= 1;
 
-            if n & wait_irq != 0 {
+            if (n & wait_irq) != 0 {
                 break;
             }
 
@@ -154,6 +152,13 @@ impl PiicoDevRfid {
 
         self.clear_register_flags(REG_BIT_FRAMING, 0x80)?;
 
+        // writeln!(
+        //     uart,
+        //     "cmd:   {cmd}   i: {i}   irq_en: {irq_en}   wait_irq: {wait_irq}    n: {n}     {}",
+        //     n & wait_irq
+        // )
+        // .unwrap();
+
         if i > 0 {
             let read = self.read_reg_byte(REG_ERROR)?;
 
@@ -163,7 +168,7 @@ impl PiicoDevRfid {
                 if (n & irq_en & 0x01) == 0x01 {
                     status = NOTAGERR;
                 } else if cmd == CMD_TRANCEIVE {
-                    n = self.read_reg_byte(REG_FIFO_LEVEL)?.into();
+                    n = self.read_reg_byte(REG_FIFO_LEVEL)? as usize;
                     let lbits: usize = (self.read_reg_byte(REG_CONTROL)? as usize) & 0x07;
 
                     if lbits != 0 {
@@ -193,17 +198,16 @@ impl PiicoDevRfid {
     }
 
     /// Use the co-processor on the RFID module to obtain CRC
-    pub fn crc(&mut self, data: &[u8]) -> Result<[u8; 2], i2c::Error> {
-        let address = I2C_ADDRESS;
-        self.i2c.write(address, &[REG_COMMAND, CMD_IDLE])?;
+    pub fn crc(&mut self, data: &[u8]) -> Result<[u8; 2], I2C::Error> {
+        self.write_reg_byte(REG_COMMAND, CMD_IDLE)?;
         self.clear_register_flags(REG_DIV_IRQ, 0x04)?;
         self.set_register_flags(REG_FIFO_LEVEL, 0x80)?;
 
         for c in data {
-            self.i2c.write(REG_FIFO_DATA, &[*c])?;
+            self.write_reg_byte(REG_FIFO_DATA, *c)?;
         }
 
-        self.i2c.write(REG_COMMAND, &[CMD_CALC_CRC])?;
+        self.write_reg_byte(REG_COMMAND, CMD_CALC_CRC)?;
 
         let mut i: u8 = 0xFF;
         loop {
@@ -214,7 +218,7 @@ impl PiicoDevRfid {
             }
         }
 
-        self.i2c.write(REG_COMMAND, &[CMD_IDLE])?;
+        self.write_reg_byte(REG_COMMAND, CMD_IDLE)?;
         Ok([
             self.read_reg_byte(REG_CRC_RESULT_LSB)?,
             self.read_reg_byte(REG_CRC_RESULT_MSB)?,
@@ -222,11 +226,10 @@ impl PiicoDevRfid {
     }
 
     /// Invites tag in state IDLE to go to READY
-    fn request(&mut self, mode: u8, uart: &mut Uart) -> Result<(u8, usize), i2c::Error> {
-        let address = I2C_ADDRESS;
-        self.i2c.write(address, &[REG_BIT_FRAMING, 0x07])?;
+    fn request(&mut self, mode: u8, uart: &mut Uart) -> Result<(u8, usize), I2C::Error> {
+        self.write_reg_byte(REG_BIT_FRAMING, 0x07)?;
         let (mut stat, _recv, bits) = self.to_card(CMD_TRANCEIVE, &[mode], uart)?;
-        writeln!(uart, "{stat} {OK} {ERR}      {bits} {}", 0x10).unwrap();
+        writeln!(uart, "Status: {stat}     Bits: {bits} {}", 0x10).unwrap();
 
         if (stat != OK) | (bits != 0x10) {
             stat = ERR
@@ -240,12 +243,11 @@ impl PiicoDevRfid {
         &mut self,
         anti_col_n: u8,
         uart: &mut Uart,
-    ) -> Result<(u8, [u8; 1024]), i2c::Error> {
+    ) -> Result<(u8, [u8; 1024]), I2C::Error> {
         let mut ser_chk = 0;
         let ser = [anti_col_n, 0x20];
 
-        let address = I2C_ADDRESS;
-        self.i2c.write(address, &[REG_BIT_FRAMING, 0x00])?;
+        self.write_reg_byte(REG_BIT_FRAMING, 0x00)?;
 
         let (mut stat, recv, _bits) = self.to_card(CMD_TRANCEIVE, &ser, uart)?;
 
@@ -273,7 +275,7 @@ impl PiicoDevRfid {
         ser_num: &[u8],
         anti_col_n: u8,
         uart: &mut Uart,
-    ) -> Result<u8, i2c::Error> {
+    ) -> Result<u8, I2C::Error> {
         let mut buf = [0; 64];
 
         buf[0] = anti_col_n;
@@ -299,7 +301,7 @@ impl PiicoDevRfid {
     }
 
     /// Returns detailed information about the tag
-    fn read_tag_id_private(&mut self, uart: &mut Uart) -> Result<TagId, i2c::Error> {
+    fn read_tag_id_private(&mut self, uart: &mut Uart) -> Result<TagId, I2C::Error> {
         let result = TagId {
             success: false,
             id_integers: [0; 1024],
@@ -386,7 +388,7 @@ impl PiicoDevRfid {
     }
 
     /// Detect the presence of a tag
-    fn _detect_tag(&mut self, uart: &mut Uart) -> Result<(bool, usize), i2c::Error> {
+    fn detect_tag(&mut self, uart: &mut Uart) -> Result<(bool, usize), I2C::Error> {
         let (stat, atqa) = self.request(TAG_CMD_REQIDL, uart)?;
         let present = stat == OK;
 
@@ -394,7 +396,7 @@ impl PiicoDevRfid {
     }
 
     // Turns the antenna on
-    fn antenna_on(&mut self) -> Result<(), i2c::Error> {
+    fn antenna_on(&mut self) -> Result<(), I2C::Error> {
         let read = self.read_reg_byte(REG_TX_CONTROL)?;
 
         if !(read & 0x03) != 0 {
@@ -405,7 +407,7 @@ impl PiicoDevRfid {
     }
 
     /// Turns the antenna off
-    fn anntenna_off(&mut self) -> Result<(), i2c::Error> {
+    fn anntenna_off(&mut self) -> Result<(), I2C::Error> {
         let read = self.read_reg_byte(REG_TX_CONTROL)?;
 
         if !(read & 0x03) == 0 {
@@ -421,11 +423,11 @@ impl PiicoDevRfid {
 
     /// Stand-alone function that puts the tag into the correct state
     /// Returns detailed information about the tag
-    pub fn read_tag_id(&mut self, uart: &mut Uart) -> Result<TagId, i2c::Error> {
-        let (mut present, _) = self._detect_tag(uart)?;
+    pub fn read_tag_id(&mut self, uart: &mut Uart) -> Result<TagId, I2C::Error> {
+        let (mut present, _) = self.detect_tag(uart)?;
         if !present {
             // Try again, the card may not be in the correct state
-            (present, _) = self._detect_tag(uart)?;
+            (present, _) = self.detect_tag(uart)?;
         }
 
         if !present {
@@ -441,7 +443,7 @@ impl PiicoDevRfid {
     }
 
     /// Wrapper for readTagID
-    pub fn is_tag_present(&mut self, uart: &mut Uart) -> Result<bool, i2c::Error> {
+    pub fn is_tag_present(&mut self, uart: &mut Uart) -> Result<bool, I2C::Error> {
         Ok(self.read_tag_id(uart)?.success)
     }
 }

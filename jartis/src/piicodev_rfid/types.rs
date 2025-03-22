@@ -1,6 +1,14 @@
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RfidStatus {
+    Ok,
+    NoTag,
+    Error,
+}
+
 pub enum TagType {
     Classic,
     NTag,
+    Unknown,
 }
 
 pub struct TagId {

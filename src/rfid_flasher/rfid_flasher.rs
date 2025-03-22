@@ -72,17 +72,14 @@ pub fn rfid_flasher_main(
     }
 
     loop {
-        delay.delay_ms(10);
+        delay.delay_ms(100);
 
-        let tag = rfid.read_tag_id(&mut uart);
+        let Ok(tag) = rfid.read_tag_id(&mut uart) else {
+            writeln!(uart, "Presence error").unwrap();
+            continue;
+        };
 
-        if let Ok(ref tag) = tag {
-            writeln!(uart, "Tag found: {}", tag.success).unwrap();
-        }
-
-        if let Err(ref e) = tag {
-            writeln!(uart, "Presence error: {:?}", e).unwrap();
-        }
+        writeln!(uart, "Tag found: {}", tag.success).unwrap();
     }
 
     let mut oled = PiicoDevSSD1306::new(i2c);
