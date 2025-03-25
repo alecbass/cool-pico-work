@@ -78,7 +78,13 @@ pub fn rfid_flasher_main(
             // writeln!(uart, "Presence error").unwrap();
             continue;
         };
+
+        if tag.success {
+            break;
+        }
     }
+
+    loop {}
 
     // let mut oled = PiicoDevSSD1306::new(i2c);
     //

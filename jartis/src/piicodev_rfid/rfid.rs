@@ -40,7 +40,6 @@ where
 
     pub fn init(&mut self) -> Result<(), I2C::Error> {
         self.reset()?;
-
         self.delay.delay_ms(50);
 
         self.write_reg_byte(REG_T_MODE, 0x80)?;
@@ -63,7 +62,7 @@ where
     /// Reads a byte from the register, based on the Adruino library at https://github.com/MakerSpaceLeiden/rfid/blob/master/src/MFRC522_i2c.cpp
     fn read_reg_byte(&mut self, register: u8) -> Result<u8, I2C::Error> {
         let address = I2C_ADDRESS;
-        let mut read_buffer = [0; 1];
+        let mut read_buffer: [u8; 1] = [0; 1];
 
         self.i2c
             .write_read(address, &[register], &mut read_buffer)?;
@@ -128,7 +127,7 @@ where
         // FlushBuffer = 1, FIFO initialization
         self.set_register_flags(REG_FIFO_LEVEL, 0x80)?;
         // Write to the FIFO
-        self.delay.delay_ms(50);
+        self.delay.delay_ms(10);
         self.write_to_fifo(REG_FIFO_DATA, send)?;
 
         if cmd == CMD_TRANCEIVE {
@@ -151,15 +150,15 @@ where
 
         writeln!(self.uart, "Reading").unwrap();
         while i > 0 {
-            self.delay.delay_ms(1);
+            // self.delay.delay_ms(1);
             n = self.read_reg_byte(REG_COM_IRQ)?;
+            i -= 1;
             if n & wait_irq != 0 {
                 break;
             }
             if n & 0x01 != 0 {
                 break;
             }
-            i -= 1;
         }
 
         // Stop the transceive operation
@@ -172,13 +171,19 @@ where
                 stat = RfidStatus::Ok;
 
                 if send.len() == 9 {
-                    writeln!(self.uart, "EEEEE {}", n & irq_en & 0x01).unwrap();
+                    writeln!(
+                        self.uart,
+                        "EEEEE n: {n} irq_en: {irq_en}     expected: {}",
+                        n & irq_en & 0x01
+                    )
+                    .unwrap();
                 }
 
                 if n & irq_en & 0x01 != 0 {
                     stat = RfidStatus::NoTag;
                 } else if cmd == CMD_TRANCEIVE {
                     let n = self.read_reg_byte(REG_FIFO_LEVEL)?;
+                    writeln!(self.uart, "to_card n: {n}").unwrap();
                     let lbits = self.read_reg_byte(REG_CONTROL)? & 0x07;
 
                     if lbits != 0 {
@@ -199,15 +204,14 @@ where
 
                     for i in 0..read_count {
                         let val = self.read_reg_byte(REG_FIFO_DATA)?;
-                        writeln!(self.uart, "Val {i}: {val}").unwrap();
                         recv[i as usize] = val;
-                        self.delay.delay_ms(5);
                     }
                 }
             } else {
                 stat = RfidStatus::Error;
             }
         }
+        writeln!(self.uart, "Reading with i: {i}   stat: {stat:?}").unwrap();
 
         Ok((stat, recv, bits))
     }
@@ -225,11 +229,11 @@ where
         self.write_reg_byte(REG_COMMAND, CMD_CALC_CRC)?;
 
         // Wait for CRC calculation to complete
-        let mut i = 0xFF;
+        let mut i: u8 = 0xFF;
         loop {
             let n = self.read_reg_byte(REG_DIV_IRQ)?;
             i -= 1;
-            if i == 0 || n & 0x04 != 0 {
+            if !((i != 0) && !(n & 0x04 != 0)) {
                 break;
             }
         }
@@ -263,13 +267,6 @@ where
         self.write_reg_byte(REG_BIT_FRAMING, 0x00)?;
 
         let (stat, recv, _bits) = self.to_card(CMD_TRANCEIVE, &ser)?;
-        writeln!(
-            self.uart,
-            "Anticoll Stat: {stat:?} {} {}",
-            recv.len(),
-            get_array_length(&recv)
-        )
-        .unwrap();
 
         if stat == RfidStatus::Ok {
             let length = get_array_length(&recv);
@@ -302,17 +299,22 @@ where
         // when the array stopped being read
         let ser_num_length = get_array_length(ser_num);
 
-        for i in 0..get_array_length(ser_num) {
+        for i in 0..ser_num_length {
             buf[i + 2] = ser_num[i];
         }
+
+        writeln!(self.uart, "ser_num: {ser_num:?}").unwrap();
+        writeln!(self.uart, "Data pre-CRC: {buf:?}").unwrap();
 
         let p_out = self.calculate_crc(&buf)?;
         buf[ser_num_length + 2] = p_out[0];
         buf[ser_num_length + 3] = p_out[1];
 
+        writeln!(self.uart, "Data post-CRC: {buf:?}").unwrap();
+
         // Only send the real data
         let data = &buf[0..ser_num_length + 4];
-        writeln!(self.uart, "CRC data: {data:?}").unwrap();
+        writeln!(self.uart, "CRC data: {data:?}   length: {}", data.len()).unwrap();
 
         let (status, _back_data, back_len) = self.to_card(CMD_TRANCEIVE, data)?;
         writeln!(
@@ -340,6 +342,7 @@ where
         }
 
         if !self.select_tag(&uid, TAG_CMD_ANTCOL1)? {
+            writeln!(self.uart, "Could not select tag").unwrap();
             return Ok(result);
         }
 
@@ -460,7 +463,6 @@ where
     /// Stand-alone function that puts the tag into the correct state
     /// Returns detailed information about the tag
     pub fn read_tag_id(&mut self) -> Result<TagId, I2C::Error> {
-        self.delay.delay_ms(500);
         let mut detection = self.detect_tag()?;
         if !detection.present {
             // Try again, the card may not be in the correct state
@@ -474,6 +476,8 @@ where
         }
 
         let result = self.read_tag_id_private();
+        self.reset()?;
+        panic!("Exiting for tests' sake");
 
         // if let Ok(ref result) = result {
         //     writeln!(self.uart, "Tag details: {result:?}").unwrap();
