@@ -29,6 +29,8 @@ jartis = { path = "./jartis" }
 # For unit conversions
 fugit = "0.3.7"
 heapless = "0.8.0"
+component = "0.1.1"
+rust_src = "0.0.0"
 
 [patch.crates-io]
 # cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
