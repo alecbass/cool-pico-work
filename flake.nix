@@ -17,7 +17,7 @@
       in
       {
         devShells.default = with pkgs; mkShell {
-          # RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
+          RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
           buildInputs = [
             rustup
             rust-bin.stable."1.85.1".default
