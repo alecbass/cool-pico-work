@@ -2,6 +2,7 @@ use core::fmt::Write;
 
 use cortex_m::delay::Delay;
 use embedded_hal::i2c::I2c;
+use heapless::{String, Vec};
 
 use super::{
     constants::{
@@ -20,6 +21,26 @@ use crate::{
     },
     Uart,
 };
+
+///
+/// Stolen from https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=57a66b58356f6c31d663d048a245eced
+/// as LLM results were not very helpful
+///
+
+struct Buffer<const N: usize>([u8; N], usize);
+
+impl<const N: usize> Write for Buffer<N> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let space_left = self.0.len() - self.1;
+        if space_left > s.len() {
+            self.0[self.1..][..s.len()].copy_from_slice(s.as_bytes());
+            self.1 += s.len();
+            Ok(())
+        } else {
+            Err(core::fmt::Error)
+        }
+    }
+}
 
 /// The length of internal read buffer arrays
 const READ_BUFFER_LENGTH: usize = 32;
@@ -143,14 +164,11 @@ where
         }
 
         self.delay.delay_ms(10);
-        writeln!(self.uart, "Doing calculation").unwrap();
         // Wait for completion
         let mut i = 20000; // Timeout counter
         let mut n = 0;
 
-        writeln!(self.uart, "Reading").unwrap();
         while i > 0 {
-            // self.delay.delay_ms(1);
             n = self.read_reg_byte(REG_COM_IRQ)?;
             i -= 1;
             if n & wait_irq != 0 {
@@ -170,20 +188,10 @@ where
             if (error_status & 0x1B) == 0x00 {
                 stat = RfidStatus::Ok;
 
-                if send.len() == 9 {
-                    writeln!(
-                        self.uart,
-                        "EEEEE n: {n} irq_en: {irq_en}     expected: {}",
-                        n & irq_en & 0x01
-                    )
-                    .unwrap();
-                }
-
                 if n & irq_en & 0x01 != 0 {
                     stat = RfidStatus::NoTag;
                 } else if cmd == CMD_TRANCEIVE {
                     let n = self.read_reg_byte(REG_FIFO_LEVEL)?;
-                    writeln!(self.uart, "to_card n: {n}").unwrap();
                     let lbits = self.read_reg_byte(REG_CONTROL)? & 0x07;
 
                     if lbits != 0 {
@@ -200,8 +208,6 @@ where
                         n
                     };
 
-                    writeln!(self.uart, "Read count: {read_count}   n: {n}").unwrap();
-
                     for i in 0..read_count {
                         let val = self.read_reg_byte(REG_FIFO_DATA)?;
                         recv[i as usize] = val;
@@ -211,7 +217,6 @@ where
                 stat = RfidStatus::Error;
             }
         }
-        writeln!(self.uart, "Reading with i: {i}   stat: {stat:?}").unwrap();
 
         Ok((stat, recv, bits))
     }
@@ -303,25 +308,16 @@ where
             buf[i + 2] = ser_num[i];
         }
 
-        writeln!(self.uart, "ser_num: {ser_num:?}").unwrap();
-        writeln!(self.uart, "Data pre-CRC: {buf:?}").unwrap();
-
-        let p_out = self.calculate_crc(&buf)?;
+        // Only send as many bytes as we should for the calcuation (should be 7)
+        let buffer_length_for_crc = get_array_length(&buf);
+        let p_out = self.calculate_crc(&buf[0..buffer_length_for_crc])?;
         buf[ser_num_length + 2] = p_out[0];
         buf[ser_num_length + 3] = p_out[1];
-
-        writeln!(self.uart, "Data post-CRC: {buf:?}").unwrap();
+        writeln!(self.uart, "{buf:?}").unwrap();
 
         // Only send the real data
         let data = &buf[0..ser_num_length + 4];
-        writeln!(self.uart, "CRC data: {data:?}   length: {}", data.len()).unwrap();
-
         let (status, _back_data, back_len) = self.to_card(CMD_TRANCEIVE, data)?;
-        writeln!(
-            self.uart,
-            "select tag to_card status: {status:?} {back_len}"
-        )
-        .unwrap();
 
         if status == RfidStatus::Ok && back_len == 0x18 {
             return Ok(true);
@@ -335,7 +331,7 @@ where
         let mut result = TagId::default();
         let mut valid_uid: [u8; 16] = [0; 16];
 
-        let (status, uid) = self.anticoll(TAG_CMD_ANTCOL1)?;
+        let (status, mut uid) = self.anticoll(TAG_CMD_ANTCOL1)?;
 
         if status != RfidStatus::Ok {
             return Ok(result);
@@ -346,81 +342,109 @@ where
             return Ok(result);
         }
 
-        writeln!(self.uart, "Got here: {status:?} {uid:?}").unwrap();
-
+        let uid_length = get_array_length(&uid);
         let mut valid_uid_index = 1;
 
-        if uid.len() > 0 && uid[0] == 0x88 {
+        if uid_length > 0 && uid[0] == 0x88 {
             // NTAG
             for i in 1..4 {
-                if i < uid.len() {
+                if i < uid_length {
                     valid_uid[valid_uid_index] = uid[i];
                     valid_uid_index += 1;
                 }
             }
 
-            let (status, uid) = self.anticoll(TAG_CMD_ANTCOL2)?;
+            let (status, mut inner_uid) = self.anticoll(TAG_CMD_ANTCOL2)?;
             if status != RfidStatus::Ok {
                 return Ok(result);
             }
 
-            let rtn = self.select_tag(&uid, TAG_CMD_ANTCOL2)?;
+            // Once again, calculate the length of actually read values rather than the lenght of
+            // the underlying buffer
+            let uid_length = get_array_length(&inner_uid);
+
+            let rtn = self.select_tag(&inner_uid[0..uid_length], TAG_CMD_ANTCOL2)?;
+            writeln!(self.uart, "rtn: {rtn:?}").unwrap();
             if !rtn {
                 return Ok(result);
             }
 
-            if uid.len() > 0 && uid[0] == 0x88 {
+            if uid_length > 0 && inner_uid[0] == 0x88 {
                 for i in 1..4 {
-                    if i < uid.len() {
-                        valid_uid[valid_uid_index] = uid[i];
+                    if i < uid_length {
+                        valid_uid[valid_uid_index] = inner_uid[i];
                         valid_uid_index += 1;
                     }
                 }
 
-                let (status, uid) = self.anticoll(TAG_CMD_ANTCOL3)?;
+                let (status, innerer_uid) = self.anticoll(TAG_CMD_ANTCOL3)?;
                 if status != RfidStatus::Ok {
                     return Ok(result);
                 }
+
+                // Get around Python re-assigning to the same variable in a destructure
+                inner_uid = innerer_uid;
             }
+
+            // Get around Python re-assigning to the same variable in a destructure
+            uid = inner_uid;
         }
 
         for i in 0..5 {
-            if i < uid.len() {
+            if i < uid_length {
                 valid_uid[valid_uid_index] = uid[i];
                 valid_uid_index += 1;
             }
         }
 
+        let valid_uid_length = valid_uid_index;
+
+        writeln!(
+            self.uart,
+            "{valid_uid_length} {valid_uid_index} {valid_uid:?}"
+        )
+        .unwrap();
         // Format ID
-        let id = valid_uid.iter().take(valid_uid.len().saturating_sub(1));
-        let mut id_formatted: [u8; 64] = [0; 64];
-        let mut id_formatted_index = 0;
+        let id = valid_uid.iter().take(valid_uid_length.saturating_sub(1));
+        let mut id_formatted: String<64> = String::new();
+        let mut hex_buffer: String<2> = String::new();
 
         for (i, &byte) in id.enumerate() {
+            writeln!(self.uart, "{i} {byte}").unwrap();
             if i > 0 {
-                id_formatted[id_formatted_index] = b':';
-                id_formatted_index += 1;
+                id_formatted.push(':').unwrap();
+                // id_formatted[id_formatted_index] = b':';
+                // id_formatted_index += 1;
             }
 
             if byte < 16 {
-                id_formatted[id_formatted_index] = b'0';
-                id_formatted_index += 1;
+                // id_formatted[id_formatted_index] = b'0';
+                // id_formatted_index += 1;
+                id_formatted.push('0').unwrap();
             }
 
-            id_formatted[id_formatted_index] = byte;
-            id_formatted_index += 1;
+            hex_buffer.clear();
+            write!(hex_buffer, "{byte:02x}").unwrap();
+            writeln!(self.uart, "{hex_buffer}").unwrap();
+
+            // id_formatted[id_formatted_index] = byte;
+            // id_formatted_index += 1;
+            id_formatted.push_str(&hex_buffer).unwrap();
         }
 
-        let tag_type = if valid_uid.len() <= 5 {
+        let tag_type = if valid_uid_length <= 5 {
             TagType::Classic
         } else {
             TagType::NTag
         };
 
+        writeln!(self.uart, "Tag type: {tag_type:?}").unwrap();
+        writeln!(self.uart, "ID formatted: {id_formatted}").unwrap();
+
         // Create result
         result.success = true;
         result.id_integers = valid_uid;
-        result.id_formatted = id_formatted;
+        // result.id_formatted = id_formatted;
         result.tag_type = tag_type;
 
         Ok(result)

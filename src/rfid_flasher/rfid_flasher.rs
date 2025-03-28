@@ -74,14 +74,10 @@ pub fn rfid_flasher_main(
     loop {
         // delay_cell.get_mut().unwrap().delay_ms(250);
 
-        let Ok(tag) = rfid.read_tag_id() else {
+        let Ok(_tag) = rfid.read_tag_id() else {
             // writeln!(uart, "Presence error").unwrap();
             continue;
         };
-
-        if tag.success {
-            break;
-        }
     }
 
     loop {}

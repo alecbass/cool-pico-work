@@ -30,6 +30,7 @@ embedded-graphics = "0.8.1"
 ssd1306 = "0.8.4"
 
 critical-section = "1.1.2"
+heapless = "0.8.0"
 
 [patch.crates-io]
 # rp2040-pac = { git = "https://github.com/alecbass/rp2040-pac.git", branch = "remove-interrupts" }
