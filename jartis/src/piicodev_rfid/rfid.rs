@@ -478,4 +478,109 @@ where
     pub fn is_tag_present(&mut self) -> Result<bool, I2C::Error> {
         Ok(self.read_tag_id()?.success)
     }
+
+    /// Required for Classic Tag only - Select a specific tag for reading & writing
+    fn classic_select_tag(&mut self, ser: &[u8]) -> Result<RfidStatus, I2C::Error> {
+        let buf: [u8; 7] = [0x93, 0x70, ser[0], ser[1], ser[2], ser[3], ser[4]];
+        let p_out = self.calculate_crc(&buf)?;
+
+        let mut crc_buf: [u8; 9] = [0; 9];
+        for (i, byte) in buf.into_iter().enumerate() {
+            crc_buf[i] = byte;
+        }
+        crc_buf[7] = p_out[0];
+        crc_buf[8] = p_out[1];
+
+        let (stat, _recv, bits) = self.to_card(CMD_TRANCEIVE, &crc_buf)?;
+
+        if stat == RfidStatus::Ok && bits == 0x18 {
+            return Ok(stat);
+        }
+
+        Ok(RfidStatus::Error)
+    }
+
+    // # Required for Classic Tag only - Authenticate the address in memory
+    // def _classicAuth(self, mode, addr, sect, ser):
+    //     return self._tocard(_CMD_MF_AUTHENT, [mode, addr] + sect + ser[:4])[0]
+    //
+    // # Required for Classic Tag only - Turn off crypto
+    // def _classicStopCrypto(self):
+    //     self._cflags(_REG_STATUS_2, 0x08)
+    ///
+    /// PiicoDev expansion
+    ///
+    ///
+
+    /// Write to an NTAG page
+    fn write_page_ntag(&mut self, page: u8, data: &[u8]) -> Result<RfidStatus, I2C::Error> {
+        let mut buf: [u8; 16] = [0; 16];
+        buf[0] = 0xA2;
+        buf[1] = page;
+
+        let data_length = get_array_length(data);
+        for (i, &byte) in data.iter().enumerate() {
+            if i >= data_length {
+                break;
+            }
+
+            buf[i + 2] = byte;
+        }
+
+        let p_out = self.calculate_crc(&buf)?;
+        buf[data_length + 1] = p_out[0];
+        buf[data_length + 2] = p_out[1];
+
+        let (stat, _recv, _bits) = self.to_card(CMD_TRANCEIVE, &buf)?;
+        Ok(stat)
+    }
+
+    /// Read a register from NTAG or Classic
+    fn read(&mut self, addr: u8) -> Result<Option<[u8; READ_BUFFER_LENGTH]>, I2C::Error> {
+        let mut data: [u8; 4] = [0x30, addr, 0, 0];
+        let p_out = self.calculate_crc(&data[0..1])?;
+        data[2] = p_out[0];
+        data[3] = p_out[1];
+        let (stat, recv, _) = self.to_card(CMD_TRANCEIVE, &data)?;
+
+        if stat != RfidStatus::Ok {
+            return Ok(None);
+        }
+
+        Ok(Some(recv))
+    }
+
+    /// Writes a number to NTAG
+    /// Slot must be >> SLOT_NO_MIN && <= SNOT_NO_MAX (0 and 35)
+    fn write_number_to_ntag(&mut self, bytes_number: &[u8], slot: u8) -> Result<bool, I2C::Error> {
+        // assert slot >= _SLOT_NO_MIN and slot <=_SLOT_NO_MAX, 'Slot must be between 0 and 35'
+        let page_adr_min = 4;
+        let stat = self.write_page_ntag(page_adr_min + slot, bytes_number)?;
+
+        let tag_write_success = stat == RfidStatus::Ok;
+        Ok(tag_write_success)
+    }
+
+    /// Writes a number to the tag
+    pub fn write_number(&mut self, number: i32, slot: u8) -> Result<bool, I2C::Error> {
+        let mut success = false;
+        let bytearray_number = i32::to_le_bytes(number); // bytearray(struct.pack('l', number))
+                                                         //
+        let mut read_tag_id_result = TagId::default();
+        while !read_tag_id_result.success {
+            read_tag_id_result = self.read_tag_id()?;
+        }
+
+        if read_tag_id_result.success {
+            if read_tag_id_result.tag_type == TagType::NTag {
+                while !success {
+                    success = self.write_number_to_ntag(&bytearray_number, slot)?;
+                }
+            }
+
+            // TODO: Classic tags
+        }
+
+        Ok(success)
+    }
 }

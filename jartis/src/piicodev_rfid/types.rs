@@ -9,7 +9,7 @@ pub enum RfidStatus {
     Error,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TagType {
     Classic,
     NTag,
