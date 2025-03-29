@@ -255,7 +255,16 @@ where
         if stat == RfidStatus::Ok {
             let length = get_array_length(&recv);
 
-            if length != 5 {
+            // Check if the tag is a classic RFID tag
+            let possible_fifth_element = recv.get(5);
+            let is_classic_tag = length == 4
+                && possible_fifth_element.is_some()
+                && *possible_fifth_element.unwrap() == 0;
+
+            // Check if hte tag is an NTag
+            let is_ntag = length == 5;
+
+            if !is_classic_tag && !is_ntag {
                 return Ok((RfidStatus::Error, recv));
             }
 
@@ -292,7 +301,6 @@ where
         let p_out = self.calculate_crc(&buf[0..buffer_length_for_crc])?;
         buf[ser_num_length + 2] = p_out[0];
         buf[ser_num_length + 3] = p_out[1];
-        writeln!(self.uart, "{buf:?}").unwrap();
 
         // Only send the real data
         let data = &buf[0..ser_num_length + 4];
@@ -311,7 +319,6 @@ where
         let mut valid_uid: [u8; 16] = [0; 16];
 
         let (status, mut uid) = self.anticoll(TAG_CMD_ANTCOL1)?;
-        writeln!(self.uart, "{status:?} {uid:?}").unwrap();
 
         if status != RfidStatus::Ok {
             return Ok(result);

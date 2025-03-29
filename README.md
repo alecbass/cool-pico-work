@@ -28,3 +28,5 @@ before running `cargo build` or `cargo run`.
 
 * RFID_FLASHER - Reads and flashes RFID chips.
 
+# TODO
+Make the RFID_FLASHER program work with classic RFID tags
