@@ -2,7 +2,6 @@ use core::fmt::Write;
 
 use cortex_m::delay::Delay;
 use embedded_hal::i2c::I2c;
-use heapless::{String, Vec};
 
 use super::{
     constants::{
@@ -21,26 +20,6 @@ use crate::{
     },
     Uart,
 };
-
-///
-/// Stolen from https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=57a66b58356f6c31d663d048a245eced
-/// as LLM results were not very helpful
-///
-
-struct Buffer<const N: usize>([u8; N], usize);
-
-impl<const N: usize> Write for Buffer<N> {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let space_left = self.0.len() - self.1;
-        if space_left > s.len() {
-            self.0[self.1..][..s.len()].copy_from_slice(s.as_bytes());
-            self.1 += s.len();
-            Ok(())
-        } else {
-            Err(core::fmt::Error)
-        }
-    }
-}
 
 /// The length of internal read buffer arrays
 const READ_BUFFER_LENGTH: usize = 32;
@@ -332,6 +311,7 @@ where
         let mut valid_uid: [u8; 16] = [0; 16];
 
         let (status, mut uid) = self.anticoll(TAG_CMD_ANTCOL1)?;
+        writeln!(self.uart, "{status:?} {uid:?}").unwrap();
 
         if status != RfidStatus::Ok {
             return Ok(result);
@@ -343,7 +323,7 @@ where
         }
 
         let uid_length = get_array_length(&uid);
-        let mut valid_uid_index = 1;
+        let mut valid_uid_index = 0;
 
         if uid_length > 0 && uid[0] == 0x88 {
             // NTAG
@@ -405,32 +385,6 @@ where
         )
         .unwrap();
         // Format ID
-        let id = valid_uid.iter().take(valid_uid_length.saturating_sub(1));
-        let mut id_formatted: String<64> = String::new();
-        let mut hex_buffer: String<2> = String::new();
-
-        for (i, &byte) in id.enumerate() {
-            writeln!(self.uart, "{i} {byte}").unwrap();
-            if i > 0 {
-                id_formatted.push(':').unwrap();
-                // id_formatted[id_formatted_index] = b':';
-                // id_formatted_index += 1;
-            }
-
-            if byte < 16 {
-                // id_formatted[id_formatted_index] = b'0';
-                // id_formatted_index += 1;
-                id_formatted.push('0').unwrap();
-            }
-
-            hex_buffer.clear();
-            write!(hex_buffer, "{byte:02x}").unwrap();
-            writeln!(self.uart, "{hex_buffer}").unwrap();
-
-            // id_formatted[id_formatted_index] = byte;
-            // id_formatted_index += 1;
-            id_formatted.push_str(&hex_buffer).unwrap();
-        }
 
         let tag_type = if valid_uid_length <= 5 {
             TagType::Classic
@@ -438,14 +392,16 @@ where
             TagType::NTag
         };
 
-        writeln!(self.uart, "Tag type: {tag_type:?}").unwrap();
-        writeln!(self.uart, "ID formatted: {id_formatted}").unwrap();
-
         // Create result
         result.success = true;
         result.id_integers = valid_uid;
+        result.id_length = valid_uid_length;
         // result.id_formatted = id_formatted;
         result.tag_type = tag_type;
+
+        let id_formatted = result.get_formatted_id().unwrap();
+        writeln!(self.uart, "Tag type: {:?}", result.tag_type).unwrap();
+        writeln!(self.uart, "ID formatted: {id_formatted}").unwrap();
 
         Ok(result)
     }
@@ -493,15 +449,13 @@ where
             detection = self.detect_tag()?;
         }
 
-        writeln!(self.uart, "Tag detected: {}", detection.present);
+        writeln!(self.uart, "Tag detected: {}", detection.present).unwrap();
 
         if !detection.present {
             return Ok(TagId::default());
         }
 
-        let result = self.read_tag_id_private();
-        self.reset()?;
-        panic!("Exiting for tests' sake");
+        self.read_tag_id_private()
 
         // if let Ok(ref result) = result {
         //     writeln!(self.uart, "Tag details: {result:?}").unwrap();
@@ -511,8 +465,6 @@ where
         //         writeln!(self.uart, "Invalid ID").unwrap();
         //     }
         // }
-
-        result
     }
 
     /// Wrapper for readTagID
