@@ -36,7 +36,7 @@ pub fn rfid_flasher_main(
     resets: &mut RESETS,
     clocks: ClocksManager,
     pins: Pins,
-    mut delay: Delay,
+    delay: Delay,
 ) -> ! {
     let uart_pins: UartPins = (
         // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
@@ -74,10 +74,16 @@ pub fn rfid_flasher_main(
     loop {
         // delay_cell.get_mut().unwrap().delay_ms(250);
 
-        let Ok(_tag) = rfid.read_tag_id() else {
-            // writeln!(uart, "Presence error").unwrap();
-            continue;
-        };
+        // A lost can be between 0-35 inclusive
+        const SLOT: u8 = 0;
+
+        if let Ok(number) = rfid.read_number(SLOT) {
+            if let Err(e) = rfid.write_number(number + 1, SLOT) {
+                panic!("{e:?}")
+            }
+        } else {
+            panic!("Could not read number");
+        }
     }
 
     loop {}

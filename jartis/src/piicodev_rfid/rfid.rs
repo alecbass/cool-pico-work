@@ -351,7 +351,6 @@ where
             let uid_length = get_array_length(&inner_uid);
 
             let rtn = self.select_tag(&inner_uid[0..uid_length], TAG_CMD_ANTCOL2)?;
-            writeln!(self.uart, "rtn: {rtn:?}").unwrap();
             if !rtn {
                 return Ok(result);
             }
@@ -386,13 +385,6 @@ where
 
         let valid_uid_length = valid_uid_index;
 
-        writeln!(
-            self.uart,
-            "{valid_uid_length} {valid_uid_index} {valid_uid:?}"
-        )
-        .unwrap();
-        // Format ID
-
         let tag_type = if valid_uid_length <= 5 {
             TagType::Classic
         } else {
@@ -403,12 +395,7 @@ where
         result.success = true;
         result.id_integers = valid_uid;
         result.id_length = valid_uid_length;
-        // result.id_formatted = id_formatted;
         result.tag_type = tag_type;
-
-        let id_formatted = result.get_formatted_id().unwrap();
-        writeln!(self.uart, "Tag type: {:?}", result.tag_type).unwrap();
-        writeln!(self.uart, "ID formatted: {id_formatted}").unwrap();
 
         Ok(result)
     }
@@ -456,22 +443,11 @@ where
             detection = self.detect_tag()?;
         }
 
-        writeln!(self.uart, "Tag detected: {}", detection.present).unwrap();
-
         if !detection.present {
             return Ok(TagId::default());
         }
 
         self.read_tag_id_private()
-
-        // if let Ok(ref result) = result {
-        //     writeln!(self.uart, "Tag details: {result:?}").unwrap();
-        //     if let Ok(id) = core::str::from_utf8(&result.id_formatted) {
-        //         writeln!(self.uart, "ID: {id}").unwrap();
-        //     } else {
-        //         writeln!(self.uart, "Invalid ID").unwrap();
-        //     }
-        // }
     }
 
     /// Wrapper for readTagID
@@ -512,29 +488,6 @@ where
     ///
     ///
 
-    /// Write to an NTAG page
-    fn write_page_ntag(&mut self, page: u8, data: &[u8]) -> Result<RfidStatus, I2C::Error> {
-        let mut buf: [u8; 16] = [0; 16];
-        buf[0] = 0xA2;
-        buf[1] = page;
-
-        let data_length = get_array_length(data);
-        for (i, &byte) in data.iter().enumerate() {
-            if i >= data_length {
-                break;
-            }
-
-            buf[i + 2] = byte;
-        }
-
-        let p_out = self.calculate_crc(&buf)?;
-        buf[data_length + 1] = p_out[0];
-        buf[data_length + 2] = p_out[1];
-
-        let (stat, _recv, _bits) = self.to_card(CMD_TRANCEIVE, &buf)?;
-        Ok(stat)
-    }
-
     /// Read a register from NTAG or Classic
     fn read(&mut self, addr: u8) -> Result<Option<[u8; READ_BUFFER_LENGTH]>, I2C::Error> {
         let mut data: [u8; 4] = [0x30, addr, 0, 0];
@@ -550,37 +503,106 @@ where
         Ok(Some(recv))
     }
 
+    /// Write to an NTAG page
+    fn write_page_ntag(
+        &mut self,
+        page: u8,
+        data: &[u8],
+        data_length: usize,
+    ) -> Result<RfidStatus, I2C::Error> {
+        let mut buf: [u8; 16] = [0; 16];
+        buf[0] = 0xA2;
+        buf[1] = page;
+
+        for (i, &byte) in data.iter().enumerate().take(data_length.saturating_sub(1)) {
+            buf[i + 2] = byte;
+        }
+
+        // Append the CRC calculation after the data
+        let p_out = self.calculate_crc(&buf[0..data_length + 2])?;
+        buf[data_length + 2] = p_out[0];
+        buf[data_length + 3] = p_out[1];
+
+        // The length of provided data plus the two prepended and two appended elements
+        let total_buf_length = data_length + 4;
+        writeln!(
+            self.uart,
+            "Write page buf: {buf:?} total_buf_length: {total_buf_length:?}"
+        )
+        .unwrap();
+
+        let (stat, _recv, _bits) = self.to_card(CMD_TRANCEIVE, &buf[0..total_buf_length])?;
+        Ok(stat)
+    }
+
     /// Writes a number to NTAG
     /// Slot must be >> SLOT_NO_MIN && <= SNOT_NO_MAX (0 and 35)
     fn write_number_to_ntag(&mut self, bytes_number: &[u8], slot: u8) -> Result<bool, I2C::Error> {
         // assert slot >= _SLOT_NO_MIN and slot <=_SLOT_NO_MAX, 'Slot must be between 0 and 35'
         let page_adr_min = 4;
-        let stat = self.write_page_ntag(page_adr_min + slot, bytes_number)?;
+        let stat = self.write_page_ntag(page_adr_min + slot, bytes_number, size_of::<i64>())?;
 
         let tag_write_success = stat == RfidStatus::Ok;
         Ok(tag_write_success)
     }
 
     /// Writes a number to the tag
-    pub fn write_number(&mut self, number: i32, slot: u8) -> Result<bool, I2C::Error> {
+    pub fn write_number(&mut self, number: i64, slot: u8) -> Result<bool, I2C::Error> {
         let mut success = false;
-        let bytearray_number = i32::to_le_bytes(number); // bytearray(struct.pack('l', number))
-                                                         //
+        let bytearray_number = i64::to_le_bytes(number);
+
         let mut read_tag_id_result = TagId::default();
         while !read_tag_id_result.success {
             read_tag_id_result = self.read_tag_id()?;
         }
 
-        if read_tag_id_result.success {
-            if read_tag_id_result.tag_type == TagType::NTag {
-                while !success {
-                    success = self.write_number_to_ntag(&bytearray_number, slot)?;
-                }
+        if read_tag_id_result.success && read_tag_id_result.tag_type == TagType::NTag {
+            while !success {
+                success = self.write_number_to_ntag(&bytearray_number, slot)?;
+                writeln!(self.uart, "Success: {success:?}").unwrap();
             }
-
-            // TODO: Classic tags
         }
 
+        // TODO: Classic tags
+
+        writeln!(self.uart, "Write number: {bytearray_number:?}").unwrap();
+
         Ok(success)
+    }
+
+    /// Reads a number from the tag
+    pub fn read_number(&mut self, slot: u8) -> Result<i64, I2C::Error> {
+        let mut bytearray_number: Option<[u8; READ_BUFFER_LENGTH]> = None;
+        let mut read_tag_id_result = self.read_tag_id()?;
+        while !read_tag_id_result.success {
+            read_tag_id_result = self.read_tag_id()?;
+        }
+
+        if read_tag_id_result.tag_type == TagType::NTag {
+            let page_address = 4;
+            bytearray_number = self.read(page_address + slot)?;
+        }
+
+        // TODO: Handle classic tags
+
+        let Some(bytearray_number) = bytearray_number else {
+            return Ok(0);
+        };
+
+        let bytes: [u8; 8] = [
+            bytearray_number[0],
+            bytearray_number[1],
+            bytearray_number[2],
+            bytearray_number[3],
+            bytearray_number[4],
+            bytearray_number[5],
+            bytearray_number[6],
+            bytearray_number[7],
+        ];
+
+        let number = i64::from_le_bytes(bytes);
+        writeln!(self.uart, "Read bytearray_number: {bytearray_number:?}").unwrap();
+        writeln!(self.uart, "Read number: {number}").unwrap();
+        Ok(number)
     }
 }
