@@ -3,7 +3,10 @@ mod reading;
 
 use core::fmt::Write;
 
-use bsp::hal::i2c::Error;
+use bsp::hal::{
+    gpio::bank0::{Gpio0, Gpio1},
+    i2c::Error,
+};
 use cortex_m::delay::Delay;
 use embedded_hal::i2c::I2c;
 use rp_pico as bsp;
@@ -320,7 +323,7 @@ impl PiicoDevQMC6310 {
     pub fn read_polar(
         &mut self,
         i2c: &mut I2CHandler,
-        uart: &mut Uart,
+        uart: &mut Uart<Gpio0, Gpio1>,
     ) -> Result<MagnetometerReading, Error> {
         const PI: f32 = 3.14159265358979323846;
 
@@ -347,7 +350,7 @@ impl PiicoDevQMC6310 {
         &mut self,
         enable_logging: bool,
         i2c: &mut I2CHandler,
-        uart: &mut Uart,
+        uart: &mut Uart<Gpio0, Gpio1>,
         delay: &mut Delay,
     ) -> Result<(), Error> {
         self.set_output_data_rate(3, i2c)?;

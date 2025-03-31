@@ -2,6 +2,7 @@ use core::fmt::Write;
 
 use cortex_m::delay::Delay;
 use embedded_hal::i2c::I2c;
+use rp_pico::hal::gpio::bank0::{Gpio0, Gpio1};
 
 use super::{
     constants::{
@@ -26,7 +27,7 @@ const READ_BUFFER_LENGTH: usize = 32;
 
 pub struct PiicoDevRfid<I2C> {
     i2c: I2C,
-    uart: Uart,
+    uart: Uart<Gpio0, Gpio1>,
     delay: Delay,
 }
 
@@ -34,7 +35,7 @@ impl<I2C> PiicoDevRfid<I2C>
 where
     I2C: I2c,
 {
-    pub fn new(i2c: I2C, uart: Uart, delay: Delay) -> Self {
+    pub fn new(i2c: I2C, uart: Uart<Gpio0, Gpio1>, delay: Delay) -> Self {
         Self { i2c, uart, delay }
     }
 
@@ -476,18 +477,6 @@ where
         Ok(RfidStatus::Error)
     }
 
-    // # Required for Classic Tag only - Authenticate the address in memory
-    // def _classicAuth(self, mode, addr, sect, ser):
-    //     return self._tocard(_CMD_MF_AUTHENT, [mode, addr] + sect + ser[:4])[0]
-    //
-    // # Required for Classic Tag only - Turn off crypto
-    // def _classicStopCrypto(self):
-    //     self._cflags(_REG_STATUS_2, 0x08)
-    ///
-    /// PiicoDev expansion
-    ///
-    ///
-
     /// Read a register from NTAG or Classic
     fn read(&mut self, addr: u8) -> Result<Option<[u8; READ_BUFFER_LENGTH]>, I2C::Error> {
         let mut data: [u8; 4] = [0x30, addr, 0, 0];
@@ -530,6 +519,8 @@ where
             "Write page buf: {buf:?} total_buf_length: {total_buf_length:?}"
         )
         .unwrap();
+        let b = &buf[0..total_buf_length];
+        writeln!(self.uart, "Writing {b:?}").unwrap();
 
         let (stat, _recv, _bits) = self.to_card(CMD_TRANCEIVE, &buf[0..total_buf_length])?;
         Ok(stat)
@@ -557,16 +548,13 @@ where
         }
 
         if read_tag_id_result.success && read_tag_id_result.tag_type == TagType::NTag {
-            while !success {
-                success = self.write_number_to_ntag(&bytearray_number, slot)?;
-                writeln!(self.uart, "Success: {success:?}").unwrap();
-            }
+            success = self.write_number_to_ntag(&bytearray_number, slot)?;
+            writeln!(self.uart, "Success: {success:?}").unwrap();
         }
 
         // TODO: Classic tags
 
         writeln!(self.uart, "Write number: {bytearray_number:?}").unwrap();
-
         Ok(success)
     }
 

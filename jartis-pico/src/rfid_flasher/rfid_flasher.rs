@@ -1,14 +1,16 @@
 use core::fmt::Write;
 
 use cortex_m::delay::Delay;
-use embedded_hal::digital::InputPin;
 use fugit::RateExtU32;
 use jartis::i2c::I2CHandler;
 use jartis::piicodev_rfid::rfid::PiicoDevRfid;
 use jartis::piicodev_ssd1306::PiicoDevSSD1306;
 use jartis::uart::{Uart, UartPins};
 use rp_pico::hal::clocks::ClocksManager;
-use rp_pico::hal::gpio::{FunctionI2C, FunctionUart, PullNone, PullUp};
+use rp_pico::hal::gpio::{
+    bank0::{Gpio0, Gpio1},
+    FunctionI2C, FunctionUart, PullNone, PullUp,
+};
 use rp_pico::hal::uart::UartPeripheral;
 use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
 use rp_pico::hal::{Clock, I2C};
@@ -38,14 +40,14 @@ pub fn rfid_flasher_main(
     pins: Pins,
     delay: Delay,
 ) -> ! {
-    let uart_pins: UartPins = (
+    let uart_pins: UartPins<Gpio0, Gpio1> = (
         // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
         pins.gpio0.reconfigure::<FunctionUart, PullNone>(),
         // UART RX (characters received by RP2040) on pin 2 (GPIO1)
         pins.gpio1.reconfigure::<FunctionUart, PullNone>(),
     );
 
-    let mut uart: Uart = UartPeripheral::new(uart_device, uart_pins, resets)
+    let mut uart: Uart<Gpio0, Gpio1> = UartPeripheral::new(uart_device, uart_pins, resets)
         .enable(
             UartConfig::new(9600_u32.Hz(), DataBits::Eight, None, StopBits::One),
             clocks.peripheral_clock.freq(),
@@ -66,7 +68,7 @@ pub fn rfid_flasher_main(
     let mut rfid = PiicoDevRfid::new(i2c, uart, delay);
     let init = rfid.init();
 
-    if let Err(e) = init {
+    if init.is_err() {
         // writeln!(uart, "RFID Initialisation error: {:?}", e).unwrap();
         panic!("Closing...");
     }
