@@ -40,12 +40,12 @@ fn main() {
 
     // Generate Rust bindings for the C wrapper
     // let bindings = bindgen::Builder::default()
-    //     .header("jartis.h") // Path to your C header file
+    //     .header("test.h") // Path to your C header file
     //     .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
     //     .generate()
     //     .expect("Unable to generate bindings");
-    //
-    // // Write the bindings to a file
+
+    // Write the bindings to a file
     // bindings
     //     .write_to_file(out.join("bindings.rs"))
     //     .expect("Couldn't write bindings!");
@@ -59,6 +59,43 @@ fn main() {
     // Build C library
     // Command::new("./c_build.sh").output().unwrap();
 
-    // println!("cargo::rustc-link-lib=static=jartis");
+    // 1. Get the project root directory
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
+
+    // 2. Construct the path to the directory containing the library
+    //    Assuming 'build/' is directly inside your project root.
+    let lib_dir = manifest_dir.join("build");
+
+    // Check if the directory exists (optional but good for diagnostics)
+    if !lib_dir.exists() {
+        panic!(
+            "Library directory build/ does not exist relative to project root ({})",
+            manifest_dir.display()
+        );
+    }
+    let lib_path_str = lib_dir.to_str().expect("Library path is not valid UTF-8");
+
+    // 3. Tell rustc where to find the library
+    //    'native=' specifies a directory for native libraries.
+    println!("cargo:rustc-link-search=native={}", lib_path_str);
+
+    // 4. Tell rustc to link the static library
+    //    'static=' links a static library. The name 'jartis' is derived
+    //    from 'libjartis.a' by removing the 'lib' prefix and '.a' suffix.
+    println!("cargo:rustc-link-lib=static=jartis");
+
+    // 5. (Optional but Recommended) Re-run build script if the library changes
+    let lib_file_path = lib_dir.join("libjartis.a");
+
+    if !lib_file_path.exists() {
+        panic!(
+            "Library file libjartis.a does not exist in build/ directory ({})",
+            lib_file_path.display()
+        );
+    }
+    println!("cargo:rerun-if-changed={}", lib_file_path.display());
+
+    // Add rerun-if-changed for the build directory itself, in case the file is replaced
+    println!("cargo:rerun-if-changed={}", lib_dir.display());
     // println!("cargo::rustc-link-search=native=target/thumbv6m-none-eabi/debug/deps/libc.a");
 }

@@ -2,15 +2,9 @@
 edition = "2021"
 name = "cool-pico-work"
 version = "0.1.0"
+build = "build.rs"
 
 crate-type = "bin"
-
-[build-dependencies]
-# Used to create Rust bindings to C functions
-bindgen = "0.71.1"
-
-# Used to compile Jartis c files
-cc = "1.2.10"
 
 [dependencies]
 

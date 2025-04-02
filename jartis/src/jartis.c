@@ -1,6 +1,6 @@
-// #include <pico/stdio.h>
-// #include "pico/stdlib.h"
-// #include "pico/cyw43_arch.h"
+#include "pico/stdio.h"
+#include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
 
 // const char ssid[] = "A Network";
 // const char pass[] = "A Password";

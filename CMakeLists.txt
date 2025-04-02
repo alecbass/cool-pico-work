@@ -33,6 +33,12 @@ set(PICO_SDK_TARGET_LIBS
     hardware_spi        # For SPI communication
     hardware_i2c        # For I2C communication
     pico_multicore      # For second core usage
+    # pico_cyw43_arch     # For wireless - alternate is pico_cyw43_arch_lwip_threadsafe_background
+    pico_cyw43_driver   # For wireless
+    pico_cyw43_arch_lwip_threadsafe_background
+    pico_lwip           # For wireless, check out the pico-sdk/src/rp2_common/pico_lwip directory for build libraries
+    pico_lwip_arch
+    pico_lwip_nosys
     # tinyusb_device      # If using USB device stack (requires submodules initialized)
     # tinyusb_board       # If using USB device stack
     # Add other libraries like hardware_dma, hardware_uart, hardware_watchdog etc.
@@ -176,8 +182,9 @@ set(CMAKE_OBJDUMP      "${TOOLCHAIN_PREFIX}objdump")
 # )
 
 pico_sdk_init()
-add_library(${LIBRARY_NAME} test.c test.h)
+add_library(${LIBRARY_NAME} jartis/src/jartis.c jartis/src/jartis.h)
 # add_executable(${LIBRARY_NAME} test.c)
-pico_add_extra_outputs(${LIBRARY_NAME})
+# pico_add_extra_outputs(${LIBRARY_NAME})
+target_include_directories(${LIBRARY_NAME} PRIVATE jartis/src)
 target_link_libraries(${LIBRARY_NAME} ${PICO_SDK_TARGET_LIBS})
 

@@ -52,6 +52,7 @@
 
           shellHook = ''
             cargo install ripgrep
+            source .env
           '';
         };
       }
