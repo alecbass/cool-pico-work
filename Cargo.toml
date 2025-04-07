@@ -1,3 +1,27 @@
 [workspace]
 resolver = "2"
 members = ["jartis", "jartis-pico"]
+
+
+[workspace.dependencies]
+# rp-pico = { version = "0.9.0", features = ["boot2", "rt", "critical-section-impl", "rom-func-cache", "disable-intrinsics"] } # disable-intrinsics results in undefined symbols
+rp-pico = "0.9.0"
+# cortex-m-rt = { version = "0.7", path = "../cortex-m/cortex-m-rt" }
+# cortex-m = { version = "0.7", path = "../cortex-m" }
+cortex-m-rt = "0.7"
+cortex-m = "0.7"
+
+# HAL abstraction layer
+embedded-hal = "1.0.0"
+embedded-hal-nb = "1.0.0"
+
+# For unit conversions
+fugit = "0.3.7"
+heapless = "0.8.0"
+
+# NOTE: Patching this overrides rp2040-hal's cortex-m version which has free() as FnOnce(&CriticalSection)
+# [patch.crates-io]
+# Currently matching the 0.7.2 version required by rp2040-hal
+# cortex-m = { path = "../cortex-m" }
+# cortex-m-rt = { path = "../cortex-m/cortex-m-rt" }
+# rp2040-hal = { git = "https://github.com/rp-rs/rp-hal.git" }

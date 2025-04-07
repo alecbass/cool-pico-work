@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "cool-pico-work"
 version = "0.1.0"
 build = "build.rs"
@@ -7,25 +7,20 @@ build = "build.rs"
 crate-type = "bin"
 
 [dependencies]
+cortex-m = { workspace = true }
+cortex-m-rt = { workspace = true }
 
-cortex-m-rt = "0.7.5"
-cortex-m = "0.7.7"
-
-embedded-hal = "1.0.0"
-embedded-hal-nb = { version = "1.0.0" }
+embedded-hal = { workspace = true }
+embedded-hal-nb = { workspace = true }
 
 # Shared with jartis so we can use pins and such
-# rp-pico = { version = "0.9.0", features = ["boot2", "rt", "critical-section-impl", "rom-func-cache", "disable-intrinsics"] } # disable-intrinsics results in undefined symbols
-rp-pico = { version = "0.9.0" }
+rp-pico = { workspace = true }
 
 jartis = { path = "../jartis" }
 
 # For unit conversions
-fugit = "0.3.7"
-heapless = "0.8.0"
-
-[patch.crates-io]
-# cortex-m-rt = { path = "./cortex-m/cortex-m-rt" }
+fugit = { workspace = true }
+heapless = { workspace = true }
 
 # cargo build/run
 [profile.dev]

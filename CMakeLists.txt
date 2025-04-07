@@ -25,6 +25,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 # 2. SDK Libraries to Build: Semicolon-separated list. Adjust as needed.
 set(PICO_SDK_TARGET_LIBS
+    stdlib
     pico_stdlib         # Base library, almost always needed
     hardware_gpio       # For GPIO control
     hardware_timer      # For hardware timers, delays

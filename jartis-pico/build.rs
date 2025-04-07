@@ -97,5 +97,20 @@ fn main() {
 
     // Add rerun-if-changed for the build directory itself, in case the file is replaced
     println!("cargo:rerun-if-changed={}", lib_dir.display());
-    // println!("cargo::rustc-link-search=native=target/thumbv6m-none-eabi/debug/deps/libc.a");
+
+    let c_file_path = PathBuf::from(
+        "/nix/store/961aqd7g5k8k4zfsvp8yyj7r3bczd4c6-gcc-arm-embedded-13.3.rel1/arm-none-eabi/lib/thumb/v6-m/nofp",
+    );
+
+    if !c_file_path.exists() {
+        panic!(
+            "C library file libc.a does not exist in nix store directory ({})",
+            c_file_path.display()
+        );
+    }
+
+    // This tells the -lc flag in .cargo/config.toml where the C library is
+    println!("cargo:rustc-link-search=native={}", c_file_path.display());
+    // println!("cargo:rustc-link-lib=static=c");
+    println!("cargo:rerun-if-changed={}", c_file_path.display());
 }

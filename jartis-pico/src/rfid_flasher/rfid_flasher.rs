@@ -6,21 +6,21 @@ use jartis::i2c::I2CHandler;
 use jartis::piicodev_rfid::rfid::PiicoDevRfid;
 use jartis::piicodev_ssd1306::PiicoDevSSD1306;
 use jartis::uart::{Uart, UartPins};
+use rp_pico::Pins;
 use rp_pico::hal::clocks::ClocksManager;
 use rp_pico::hal::gpio::{
-    bank0::{Gpio0, Gpio1},
     FunctionI2C, FunctionUart, PullNone, PullUp,
+    bank0::{Gpio0, Gpio1},
 };
 use rp_pico::hal::uart::UartPeripheral;
 use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
 use rp_pico::hal::{Clock, I2C};
 use rp_pico::pac::{I2C0, RESETS, UART0};
-use rp_pico::Pins;
 
 use super::state::State;
 
 #[link(name = "jartis", kind = "static")]
-extern "C" {
+unsafe extern "C" {
     fn connectToWifi() -> i32;
 }
 
@@ -43,7 +43,7 @@ pub fn rfid_flasher_main(
     resets: &mut RESETS,
     clocks: ClocksManager,
     pins: Pins,
-    delay: Delay,
+    mut delay: Delay,
 ) -> ! {
     let uart_pins: UartPins<Gpio0, Gpio1> = (
         // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
@@ -72,6 +72,8 @@ pub fn rfid_flasher_main(
     writeln!(uart, "Initialising RFID...").unwrap();
 
     unsafe {
+        writeln!(uart, "Connecting to wifi").unwrap();
+        delay.delay_ms(200);
         writeln!(uart, "Connect to wifi result: {}", connectToWifi()).unwrap();
     }
 
