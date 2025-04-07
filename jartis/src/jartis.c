@@ -19,9 +19,9 @@
 int connectToWifi() {
     // stdio_init_all();
 
-    if (cyw43_arch_init_with_country(CYW43_COUNTRY_UK)) {
-        return 1;
-    }
+    // if (cyw43_arch_init_with_country(CYW43_COUNTRY_UK)) {
+    //     return 1;
+    // }
     
     // cyw43_arch_enable_sta_mode();
     // 
