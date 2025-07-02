@@ -4,12 +4,12 @@
 #![no_std]
 #![no_main]
 
+use bsp::Pins;
 use bsp::entry;
-use bsp::hal::clocks::{init_clocks_and_plls, Clock};
+use bsp::hal::clocks::{Clock, init_clocks_and_plls};
 use bsp::hal::pac;
 use bsp::hal::sio::Sio;
 use bsp::hal::watchdog::Watchdog;
-use bsp::Pins;
 use cortex_m::delay::Delay;
 use rp_pico as bsp;
 
@@ -17,10 +17,10 @@ mod rfid_flasher;
 
 use rfid_flasher::rfid_flasher::rfid_flasher_main;
 
-// #[link(name = "jartis")]
-// extern "C" {
-//     pub fn connectToWifi() -> i32;
-// }
+#[link(name = "jartis")]
+unsafe extern "C" {
+    pub fn connectToWifi() -> i32;
+}
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
@@ -63,12 +63,12 @@ fn main() -> ! {
 
     let runtime = option_env!("PROGRAM");
 
-    match runtime {
-        Some("RFID_FLASHER") => {
-            rfid_flasher_main(pac.UART0, pac.I2C0, &mut pac.RESETS, clocks, pins, delay)
-        }
-        _ => loop {},
+    #[cfg(feature = "rfid_flasher")]
+    {
+        rfid_flasher_main(pac.UART0, pac.I2C0, &mut pac.RESETS, clocks, pins, delay)
     }
+
+    loop {}
 
     // This is the correct pin on the Raspberry Pico board. On other boards, even if they have an
     // on-board LED, it might need to be changed.
@@ -81,8 +81,6 @@ fn main() -> ! {
     // in series with the LED.
     //
     // // Make a UART on the given pins
-
-    // let connection_attempt = unsafe { connectToWifi() };
 
     // Init PWMs
     // let mut pwm_slices = Slices::new(pac.PWM, &mut pac.RESETS);

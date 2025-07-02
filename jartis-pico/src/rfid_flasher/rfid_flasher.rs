@@ -60,6 +60,12 @@ pub fn rfid_flasher_main(
         )
         .unwrap();
 
+    writeln!(uart, "Connecting to wifi...").unwrap();
+    let connection_attempt = unsafe { connectToWifi() };
+    writeln!(uart, "Connect to wifi result: {connection_attempt}").unwrap();
+
+    writeln!(uart, "Initialising RFID...").unwrap();
+
     // Create I2C for the OLED display
     let i2c: I2CHandler = I2C::i2c0(
         i2c_device,

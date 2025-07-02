@@ -38,6 +38,10 @@
             udev
             minicom
 
+            # To talk over wires for OpenOCD
+            libftdi1
+            jimtcl # To compile OpenOCD
+
             neovim
           ]
           ++ nixpkgs.lib.optionals (pkgs.stdenv.isDarwin) [

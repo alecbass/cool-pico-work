@@ -73,3 +73,7 @@ debug-assertions = false
 incremental = false
 lto = 'fat'
 opt-level = 3
+
+[features]
+default = ["rfid_flasher"]
+rfid_flasher = []

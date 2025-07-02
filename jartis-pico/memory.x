@@ -2,7 +2,6 @@ MEMORY {
     BOOT2 : ORIGIN = 0x10000000, LENGTH = 0x200
     FLASH : ORIGIN = 0x10000200, LENGTH = 2048K - 0x100
     RAM   : ORIGIN = 0x20000000, LENGTH = 256K
-    PICO_FLASH : ORIGIN = 0x20000000, LENGTH = 256K
 
     /** From the pico-sdk memory mapping */
     /** RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k */
@@ -21,32 +20,30 @@ SECTIONS {
 
     /* ## Sections in RAM */
     /* ### .data */
-    .data : ALIGN(4)
+    .c_data : ALIGN(4)
     {
-      __sdata = .;
-      __data_start__ = .;
-      *(vtable)
+        __data_start__ = LOADADDR(.data);
+        // __data_end__ = SIZEOF(.data);
+        *(vtable)
 
-      *(.time_critical*)
+        *(.time_critical*)
 
-      *(.data .data*)
+        . = ALIGN(4);
+        *(.after_data.*)
+        . = ALIGN(4);
+        /* preinit data */
+        PROVIDE_HIDDEN (__mutex_array_start = .);
+        KEEP(*(SORT(.mutex_array.*)))
+        KEEP(*(.mutex_array))
+        PROVIDE_HIDDEN (__mutex_array_end = .);
 
-      . = ALIGN(4);
-      *(.after_data.*)
-      . = ALIGN(4);
-      /* preinit data */
-      PROVIDE_HIDDEN (__mutex_array_start = .);
-      KEEP(*(SORT(.mutex_array.*)))
-      KEEP(*(.mutex_array))
-      PROVIDE_HIDDEN (__mutex_array_end = .);
+        . = ALIGN(4);
+        *(.jcr)
 
-      . = ALIGN(4);
-      *(.jcr)
-
-      . = ALIGN(4); /* 4-byte align the end (VMA) of this section */
-      __data_end__ = .;
-    } > PICO_FLASH AT > RAM
-    PROVIDE(__data_end__ = .);
+        . = ALIGN(4); /* 4-byte align the end (VMA) of this section */
+        __data_end__ = .;
+    } > RAM
+    PROVIDE(__data_end__ = SIZEOF(.data));
 
     .tbss (NOLOAD) : {
         . = ALIGN(4);
@@ -58,7 +55,7 @@ SECTIONS {
         __tls_end = .;
     } > RAM
 
-    .bss (NOLOAD) : {
+    .c_bss (NOLOAD) : {
         . = ALIGN(4);
         __tbss_end = .;
 
@@ -68,9 +65,9 @@ SECTIONS {
         __bss_end__ = .;
     } > RAM
 
-    .heap (NOLOAD):
+    .c_heap (NOLOAD):
     {
-        __end__ = .;
+        __end__ = __sheap;
         end = __end__;
         KEEP(*(.heap*))
     } > RAM
@@ -91,6 +88,11 @@ SECTIONS {
         __scratch_y_end__ = .;
     } > SCRATCH_Y AT > FLASH
     __scratch_y_source__ = LOADADDR(.scratch_y);
+
+    .flash_end : {
+        KEEP(*(.embedded_end_block*))
+        PROVIDE(__flash_binary_end = .);
+    } > FLASH
 
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);
     __StackOneTop = ORIGIN(SCRATCH_X) + LENGTH(SCRATCH_X);

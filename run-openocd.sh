@@ -9,4 +9,8 @@ fi
 
 # cd openocd && src/openocd -f interface/cmsis-dap.cfg -c 'adapter speed 5000' -f target/rp2040.cfg -s tcl
 # Run from the `openocd` directory
-./src/openocd -s tcl -f interface/cmsis-dap.cfg -f target/rp2040.cfg -c "adapter speed 5000"
+./src/openocd \
+    -s tcl \
+    -f interface/cmsis-dap.cfg \
+    -f target/rp2040.cfg \
+    -c "adapter speed 5000;program \"${command:raspberry-pi-pico.launchTargetPath}\" verify; reset halt ; rp2040.core1 arp_reset assert 0 ; rp2040.core0 arp_reset assert 0"
