@@ -22,6 +22,7 @@ use super::state::State;
 #[link(name = "jartis", kind = "static")]
 unsafe extern "C" {
     fn connectToWifi() -> i32;
+
 }
 
 /// Updates the OLED so that the updated state can appear on it
@@ -74,7 +75,9 @@ pub fn rfid_flasher_main(
     unsafe {
         writeln!(uart, "Connecting to wifi").unwrap();
         delay.delay_ms(200);
-        writeln!(uart, "Connect to wifi result: {}", connectToWifi()).unwrap();
+
+        let r = connectToWifi();
+        writeln!(uart, "Connect to wifi result: {r}").unwrap();
     }
 
     let mut rfid = PiicoDevRfid::new(i2c, uart, delay);

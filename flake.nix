@@ -20,11 +20,8 @@
           RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
           buildInputs = [
             rustup
-            rust-bin.stable."1.85.1".default
-            # rust-bin.stable."1.85.1".default.override {
-            #   extensions = [ "rust-src "];
-            #   targets = [ "thumbv6m-none-eabi" ];
-            # }
+            rust-bin.stable."1.88.0".default
+
             openssl
             pkg-config
             eza

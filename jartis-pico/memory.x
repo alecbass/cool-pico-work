@@ -18,38 +18,34 @@ SECTIONS {
         KEEP(*(.boot2));
     } > BOOT2
 
-    .data : {
-        sdata = .;
-        __data_start__ = sdata;
+    /* ## Sections in RAM */
+    /* ### .data */
+    .data : ALIGN(4)
+    {
+      __sdata = .;
+      __data_start__ = .;
+      *(vtable)
 
-        *(vtable)
+      *(.time_critical*)
 
-        *(.time_critical*)
+      *(.data .data*)
 
-        /* remaining .text and .rodata; i.e. stuff we exclude above because we want it in RAM */
-        *(.text*)
-        . = ALIGN(4);
-        *(.rodata*)
-        . = ALIGN(4);
+      . = ALIGN(4);
+      *(.after_data.*)
+      . = ALIGN(4);
+      /* preinit data */
+      PROVIDE_HIDDEN (__mutex_array_start = .);
+      KEEP(*(SORT(.mutex_array.*)))
+      KEEP(*(.mutex_array))
+      PROVIDE_HIDDEN (__mutex_array_end = .);
 
-        *(.data*)
+      . = ALIGN(4);
+      *(.jcr)
 
-        . = ALIGN(4);
-        *(.after_data.*)
-        . = ALIGN(4);
-        /* preinit data */
-        PROVIDE_HIDDEN (__mutex_array_start = .);
-        KEEP(*(SORT(.mutex_array.*)))
-        KEEP(*(.mutex_array))
-        PROVIDE_HIDDEN (__mutex_array_end = .);
-
-        . = ALIGN(4);
-        *(.jcr)
-        . = ALIGN(4);
-
-        edata = .;
-        __data_end__ = edata;
-    } > RAM /* Remove this? */
+      . = ALIGN(4); /* 4-byte align the end (VMA) of this section */
+      __data_end__ = .;
+    } > RAM AT > FLASH
+    PROVIDE(__data_end__ = .);
 
     .tbss (NOLOAD) : {
         . = ALIGN(4);
