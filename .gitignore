@@ -16,3 +16,6 @@ cortex-m/
 
 # Debugging
 openocd/
+
+# Direnv
+.direnv/

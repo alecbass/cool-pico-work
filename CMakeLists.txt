@@ -18,7 +18,10 @@ include(pico_sdk_import.cmake)
 
 set(LIBRARY_NAME jartis)
 
-project(${LIBRARY_NAME} C CXX ASM)
+project(
+    ${LIBRARY_NAME} 
+    LANGUAGES C CXX ASM
+)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -57,7 +60,7 @@ message(STATUS "Planning to build SDK libraries: ${PICO_SDK_TARGET_LIBS}")
 # Ensure ARM GCC toolchain executables (arm-none-eabi-gcc etc.) are in your PATH
 # We explicitly pass these to the external project's CMake configuration.
 # set(TOOLCHAIN_PREFIX "arm-none-eabi-")
-set(TOOLCHAIN_PREFIX "/nix/store/961aqd7g5k8k4zfsvp8yyj7r3bczd4c6-gcc-arm-embedded-13.3.rel1/bin/arm-none-eabi-")
+set(TOOLCHAIN_PREFIX "${ARM_EMBEDDED_DIR}/bin/arm-none-eabi-")
 set(CMAKE_C_COMPILER   "${TOOLCHAIN_PREFIX}gcc")
 set(CMAKE_CXX_COMPILER "${TOOLCHAIN_PREFIX}g++")
 set(CMAKE_ASM_COMPILER "${TOOLCHAIN_PREFIX}gcc")

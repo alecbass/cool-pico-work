@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 
-# set -e
+set -e
 
-# Load required environment variables incase we forgot to
+# Load required environment variables in case we forgot to
 source .env
 
 # C lib directory when running normally with the ARM embedded toolchain installed
 c_lib_dir="/usr/lib/arm-none-eabi/newlib/thumb/v6-m/nofp/"
 
-if [[ -d /nix/store/ ]]; then
-    # Find the C lib directory when running on nix
-    echo "Running on Nix, assuming that the gcc-arm-embedded package is installed"
-    echo "Scanning /nix/store directory to find the gcc-arm-embedded directory"
+# Nix flocation
+arm_embedded_dir=$GCC_ARM_EMBEDDED_TOOLCHAIN
 
-    arm_embedded_dir=$(find /nix/store -type d -name "*.rel1")
-    c_lib_dir="${arm_embedded_dir}/arm-none-eabi/lib/thumb/v6-m/nofp/"
-
-    echo "C library directory found at ${c_lib_dir}"
+if [[ -z $arm_embedded_dir ]]; then
+    echo "GCC_ARM_EMBEDDED_TOOLCHAIN is not set. Needed to compile the Pico C library."
+    exit 1
 fi
+
+c_lib_dir="${arm_embedded_dir}/arm-none-eabi/lib/thumb/v6-m/nofp/"
 
 if [[ ! -d build ]]; then
     mkdir build
@@ -29,8 +28,12 @@ cd build || exit 1
 cp "${PICO_SDK_PATH}/external/pico_sdk_import.cmake" ..
 cp "${PICO_EXAMPLES_PATH}/pico_w/wifi/lwipopts_examples_common.h" ../lwipopts.h
 
+export CMAKE_LIBRARY_PATH="$CMAKE_LIBRARY_PATH:$c_lib_dir"
+
+echo "DIR: $c_lib_dir"
+echo "ARM dir: $arm_embedded_dir"
 # Exporting compile commands creates a compile_commands.json that lets clangd find header files
-cmake -DPICO_BOARD=pico_w -DCMAKE_EXPORT_COMPILE_COMMANDS=1 ..
+cmake -DPICO_BOARD=pico_w -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DARM_EMBEDDED_DIR="$arm_embedded_dir" ..
 make
 
 # NOTE: Make will fail as it attempts to build a .uf2 file
@@ -61,17 +64,15 @@ fi
 
 cp "$static_lib_file" "$static_lib_target_dir"
 
-echo "Statting $c_lib_dir"
-
-for file in $(ls $c_lib_dir); do
-    if [[ $file != *.a ]]; then
-        continue
-    fi
-
-    echo "Moving $file - will require sudo to copy the C library .a static libraries :("
-    sudo cp "${c_lib_dir}${file}" "$static_lib_target_dir"
-done
+# for file in $c_lib_dir; do
+#     [[ -e $file ]] || continue # Empty directory
+#
+#     if [[ $file != *.a ]]; then
+#         continue
+#     fi
+#
+#     echo "Moving $file - will require sudo to copy the C library .a static libraries :("
+#     sudo cp "${c_lib_dir}${file}" "$static_lib_target_dir"
+# done
 
 echo "C lib dir: $c_lib_dir"
-
-echo "C compilation complete!"

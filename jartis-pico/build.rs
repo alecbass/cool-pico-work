@@ -98,8 +98,9 @@ fn main() {
     // Add rerun-if-changed for the build directory itself, in case the file is replaced
     println!("cargo:rerun-if-changed={}", lib_dir.display());
 
+    let arm_embedded_dir = env!("GCC_ARM_EMBEDDED_TOOLCHAIN");
     let c_file_path = PathBuf::from(
-        "/nix/store/961aqd7g5k8k4zfsvp8yyj7r3bczd4c6-gcc-arm-embedded-13.3.rel1/arm-none-eabi/lib/thumb/v6-m/nofp",
+        format!("{arm_embedded_dir}/arm-none-eabi/lib/thumb/v6-m/nofp")
     );
 
     if !c_file_path.exists() {

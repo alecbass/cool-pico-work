@@ -17,7 +17,6 @@
       in
       {
         devShells.default = with pkgs; mkShell {
-          RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
           buildInputs = [
             rustup
             rust-bin.stable."1.88.0".default
@@ -47,10 +46,8 @@
             darwin.apple_sdk.frameworks.SystemConfiguration
           ];
 
-          shellHook = ''
-            cargo install ripgrep
-            source .env
-          '';
+          RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
+          GCC_ARM_EMBEDDED_TOOLCHAIN = "${gcc-arm-embedded-13}";
         };
       }
     );
