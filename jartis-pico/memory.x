@@ -2,6 +2,7 @@ MEMORY {
     BOOT2 : ORIGIN = 0x10000000, LENGTH = 0x200
     FLASH : ORIGIN = 0x10000200, LENGTH = 2048K - 0x100
     RAM   : ORIGIN = 0x20000000, LENGTH = 256K
+    PICO_FLASH : ORIGIN = 0x20000000, LENGTH = 256K
 
     /** From the pico-sdk memory mapping */
     /** RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k */
@@ -44,7 +45,7 @@ SECTIONS {
 
       . = ALIGN(4); /* 4-byte align the end (VMA) of this section */
       __data_end__ = .;
-    } > RAM AT > FLASH
+    } > PICO_FLASH AT > RAM
     PROVIDE(__data_end__ = .);
 
     .tbss (NOLOAD) : {
