@@ -17,10 +17,6 @@ mod rfid_flasher;
 
 use rfid_flasher::rfid_flasher::rfid_flasher_main;
 
-#[link(name = "jartis")]
-unsafe extern "C" {
-    pub fn connectToWifi() -> i32;
-}
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));

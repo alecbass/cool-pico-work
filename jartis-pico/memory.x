@@ -55,11 +55,13 @@ SECTIONS {
         __tls_end = .;
     } > RAM
 
+    /** Checked up to here before it starts failing */
+
     .c_bss (NOLOAD) : {
         . = ALIGN(4);
         __tbss_end = .;
 
-        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.c_bss*)))
         *(COMMON)
         . = ALIGN(4);
         __bss_end__ = .;
@@ -69,7 +71,7 @@ SECTIONS {
     {
         __end__ = __sheap;
         end = __end__;
-        KEEP(*(.heap*))
+        KEEP(*(.c_heap*))
     } > RAM
 
     /* Start and end symbols must be word-aligned */

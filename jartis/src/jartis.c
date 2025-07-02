@@ -1,4 +1,5 @@
 #include "pico/cyw43_arch.h"
+#include "pico/bootrom.h"
 
 // const char ssid[] = "A Network";
 // const char pass[] = "A Password";
@@ -16,7 +17,6 @@
 
 int connectToWifi() {
     // stdio_init_all();
-
     if (cyw43_arch_init_with_country(CYW43_COUNTRY_UK)) {
         return 1;
     }
