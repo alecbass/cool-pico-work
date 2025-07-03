@@ -23,10 +23,10 @@ cat /dev/ttyACM0
 ```
 
 # Programs
-This repository contains some programs ready to flash onto a PICO. To run them, set the PROGRAM environment variable
-before running `cargo build` or `cargo run`.
+This repository contains some programs ready to flash onto a PICO. To run them, build with the given feature with
+`cargo build` or `cargo run`.
 
-* RFID_FLASHER - Reads and flashes RFID chips.
+* RFID_FLASHER - Reads and flashes RFID chips. (Doesn't actually lol, this is a work in progress)
 
 # TODO
 Make the RFID_FLASHER program work with classic RFID tags
