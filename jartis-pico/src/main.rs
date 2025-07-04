@@ -16,7 +16,6 @@ use rp_pico as bsp;
 mod rfid_flasher;
 mod wireless;
 
-use rfid_flasher::rfid_flasher::rfid_flasher_main;
 use wireless::wireless_main;
 
 /// This how we transfer the UART into the Interrupt Handler

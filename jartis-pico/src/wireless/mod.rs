@@ -43,7 +43,7 @@ pub fn wireless_main(
     unsafe {
         loop {
             writeln!(uart, "Connecting to wifi").unwrap();
-            delay.delay_ms(200);
+            // delay.delay_ms(200);
 
             let r = connectToWifi();
             writeln!(uart, "Connect to wifi result: {r}").unwrap();

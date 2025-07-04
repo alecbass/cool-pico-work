@@ -18,11 +18,14 @@ SECTIONS {
         KEEP(*(.boot2));
     } > BOOT2
 
+    PROVIDE(__logibal_binary_start = LOADADDR(.text));
+
     /* ## Sections in RAM */
     /* ### .data */
     .c_data : ALIGN(4)
     {
-        __data_start__ = LOADADDR(.data);
+        // __data_start__ = .;
+        // __data_start__ = LOADADDR(.data);
         // __data_end__ = SIZEOF(.data);
         *(vtable)
 
@@ -41,19 +44,22 @@ SECTIONS {
         *(.jcr)
 
         . = ALIGN(4); /* 4-byte align the end (VMA) of this section */
-        __data_end__ = .;
+        // __data_end__ = .;
     } > RAM
-    PROVIDE(__data_end__ = SIZEOF(.data));
+    PROVIDE(__data_start__ = __sdata);
+    PROVIDE(__data_end__ = __edata);
 
     .tbss (NOLOAD) : {
         . = ALIGN(4);
-        __bss_start__ = .;
+        // __bss_start__ = .;
         __tls_base = .;
         *(.tbss .tbss.* .gnu.linkonce.tb.*)
         *(.tcommon)
 
         __tls_end = .;
     } > RAM
+    PROVIDE(__bss_start__ = __sbss);
+    PROVIDE(__bss_end__ = __ebss);
 
     /** Checked up to here before it starts failing */
 
@@ -64,7 +70,7 @@ SECTIONS {
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.c_bss*)))
         *(COMMON)
         . = ALIGN(4);
-        __bss_end__ = .;
+        // __bss_end__ = .;
     } > RAM
 
     .c_heap (NOLOAD):
