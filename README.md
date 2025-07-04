@@ -10,6 +10,7 @@ Enjoy!!!!!!!!!
 Using both rp-pico and embassy has provided some weird linker __INTERRUPTS linker errors
 .boot2 memory potentially scuffed
 
+Move into the `pico-sdk` submodule and run `git submodule update --init` to make cyw43 drivers available.
 
 # OpenOCD compilation notes
 I had to remove the -Wstrict-prototypes and -Werror GCC flags from OpenOCD's Makefile

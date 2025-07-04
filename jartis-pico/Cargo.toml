@@ -1,6 +1,6 @@
 [package]
 edition = "2024"
-name = "cool-pico-work"
+name = "jartis-pico"
 version = "0.1.0"
 build = "build.rs"
 
@@ -75,5 +75,6 @@ lto = 'fat'
 opt-level = 3
 
 [features]
-default = ["rfid_flasher"]
+default = ["wireless"]
 rfid_flasher = []
+wireless = []

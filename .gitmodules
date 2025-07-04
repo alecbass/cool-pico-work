@@ -1,3 +1,6 @@
 [submodule "Servo"]
 	path = Servo
 	url = https://github.com/arduino-libraries/Servo
+[submodule "pico-sdk"]
+	path = pico-sdk
+	url = git@github.com:raspberrypi/pico-sdk.git

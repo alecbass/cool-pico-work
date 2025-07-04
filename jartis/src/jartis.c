@@ -1,5 +1,4 @@
 #include "pico/cyw43_arch.h"
-#include "pico/bootrom.h"
 
 // const char ssid[] = "A Network";
 // const char pass[] = "A Password";

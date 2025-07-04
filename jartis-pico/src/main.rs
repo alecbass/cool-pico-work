@@ -14,9 +14,10 @@ use cortex_m::delay::Delay;
 use rp_pico as bsp;
 
 mod rfid_flasher;
+mod wireless;
 
 use rfid_flasher::rfid_flasher::rfid_flasher_main;
-
+use wireless::wireless_main;
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
@@ -57,7 +58,10 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let runtime = option_env!("PROGRAM");
+    #[cfg(feature = "wireless")]
+    {
+        wireless_main(pac.UART0, &mut pac.RESETS, clocks, pins, delay);
+    }
 
     #[cfg(feature = "rfid_flasher")]
     {

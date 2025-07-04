@@ -2,9 +2,6 @@
 
 set -e
 
-# Load required environment variables in case we forgot to
-source .env
-
 # C lib directory when running normally with the ARM embedded toolchain installed
 c_lib_dir="/usr/lib/arm-none-eabi/newlib/thumb/v6-m/nofp/"
 
@@ -26,14 +23,16 @@ cd build || exit 1
 
 # Build C library
 cp "${PICO_SDK_PATH}/external/pico_sdk_import.cmake" ..
-cp "${PICO_EXAMPLES_PATH}/pico_w/wifi/lwipopts_examples_common.h" ../lwipopts.h
 
 export CMAKE_LIBRARY_PATH="$CMAKE_LIBRARY_PATH:$c_lib_dir"
 
-echo "DIR: $c_lib_dir"
-echo "ARM dir: $arm_embedded_dir"
 # Exporting compile commands creates a compile_commands.json that lets clangd find header files
-cmake -DPICO_BOARD=pico_w -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DARM_EMBEDDED_DIR="$arm_embedded_dir" ..
+cmake \
+    -DPICO_BOARD=pico_w \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
+    -DARM_EMBEDDED_DIR="$arm_embedded_dir" \
+    -DPICO_SDK_PATH="$PICO_SDK_PATH" \
+    ..
 make
 
 # NOTE: Make will fail as it attempts to build a .uf2 file
@@ -43,8 +42,7 @@ make
 
 # cd /app/CMakeFiles/jartis.dir || exit 1
 cmake -E cmake_link_script CMakeFiles/jartis.dir/link.txt
-echo "Created static library"
-echo "IGNORE THE PREVIOUS WARNINGS. WE ONLY CARE THAT A libjartis.a FILE WAS CREATED"
+echo "Created static libjartis.a library"
 
 # Return to the root directory
 cd .. || exit 1
@@ -62,17 +60,5 @@ if [[ ! -d "$static_lib_target_dir" ]]; then
     mkdir -p "$static_lib_target_dir"
 fi
 
+# Make libjartis.a available to be linked to Rust
 cp "$static_lib_file" "$static_lib_target_dir"
-
-# for file in $c_lib_dir; do
-#     [[ -e $file ]] || continue # Empty directory
-#
-#     if [[ $file != *.a ]]; then
-#         continue
-#     fi
-#
-#     echo "Moving $file - will require sudo to copy the C library .a static libraries :("
-#     sudo cp "${c_lib_dir}${file}" "$static_lib_target_dir"
-# done
-
-echo "C lib dir: $c_lib_dir"

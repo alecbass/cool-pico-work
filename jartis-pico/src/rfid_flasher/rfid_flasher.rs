@@ -19,11 +19,6 @@ use rp_pico::pac::{I2C0, RESETS, UART0};
 
 use super::state::State;
 
-#[link(name = "jartis", kind = "static")]
-unsafe extern "C" {
-    fn connectToWifi() -> i32;
-}
-
 /// Updates the OLED so that the updated state can appear on it
 fn update_oled(state: &State, oled: &mut PiicoDevSSD1306) -> Result<(), ()> {
     // Clear the text
@@ -72,16 +67,6 @@ pub fn rfid_flasher_main(
     );
 
     writeln!(uart, "Initialising RFID...").unwrap();
-
-    unsafe {
-        loop {
-            writeln!(uart, "Connecting to wifi").unwrap();
-            delay.delay_ms(200);
-
-            let r = connectToWifi();
-            writeln!(uart, "Connect to wifi result: {r}").unwrap();
-        }
-    }
 
     let mut rfid = PiicoDevRfid::new(i2c, uart, delay);
     let init = rfid.init();
