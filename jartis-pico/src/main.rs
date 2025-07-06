@@ -5,23 +5,30 @@
 #![no_main]
 
 use bsp::Pins;
-use bsp::entry;
 use bsp::hal::clocks::{Clock, init_clocks_and_plls};
+use bsp::hal::entry; // Usual import of bsp::entry is disabled due to the disabled "rt" feature
 use bsp::hal::pac;
 use bsp::hal::sio::Sio;
 use bsp::hal::watchdog::Watchdog;
 use cortex_m::delay::Delay;
+use cortex_m_rt::exception;
+use embassy_executor::Executor;
 use rp_pico as bsp;
 
 mod rfid_flasher;
-mod wireless;
 
+#[cfg(feature = "wireless")]
+mod wireless;
+use static_cell::StaticCell;
 use wireless::wireless_main;
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
 
 const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
+
+#[exception]
+unsafe fn DefaultHandler(_irqn: i16) {}
 
 #[entry]
 fn main() -> ! {
@@ -59,7 +66,15 @@ fn main() -> ! {
 
     #[cfg(feature = "wireless")]
     {
-        wireless_main(pac.UART0, &mut pac.RESETS, clocks, pins, delay);
+        // Create static executor
+        static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+        let executor = EXECUTOR.init(Executor::new());
+
+        executor.run(|spawner| {
+            spawner.must_spawn(wireless_main(
+                spawner, pac.UART0, pac.RESETS, clocks, pins, delay,
+            ));
+        });
     }
 
     #[cfg(feature = "rfid_flasher")]

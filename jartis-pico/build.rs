@@ -23,80 +23,11 @@ fn main() {
         .unwrap();
     println!("cargo:rustc-link-search={}", out.display());
 
-    // Tell Cargo to link the Pico SDK
-    // println!(
-    //     "cargo:rustc-link-search={}",
-    //     env::var("PICO_SDK_PATH").unwrap()
-    // );
-
-    // Link the C standard library
-    // println!("cargo::rustc-link-lib=static=c");
-
-    // Build the Pico SDK C code
-    // cc::Build::new()
-    //     .file("src/jartis.c") // Path to your C wrapper file
-    //     .include(&env::var("PICO_SDK_PATH").unwrap())
-    //     .compile("jartis");
-
-    // Generate Rust bindings for the C wrapper
-    // let bindings = bindgen::Builder::default()
-    //     .header("test.h") // Path to your C header file
-    //     .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-    //     .generate()
-    //     .expect("Unable to generate bindings");
-
-    // Write the bindings to a file
-    // bindings
-    //     .write_to_file(out.join("bindings.rs"))
-    //     .expect("Couldn't write bindings!");
-
     // By default, Cargo will re-run a build script whenever
     // any file in the project changes. By specifying `memory.x`
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
-
-    // Build C library
-    // Command::new("./c_build.sh").output().unwrap();
-
-    // 1. Get the project root directory
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
-
-    // 2. Construct the path to the directory containing the library
-    //    Assuming 'build/' is directly inside your project root.
-    let lib_dir = manifest_dir.join("build");
-
-    // Check if the directory exists (optional but good for diagnostics)
-    if !lib_dir.exists() {
-        panic!(
-            "Library directory build/ does not exist relative to project root ({})",
-            manifest_dir.display()
-        );
-    }
-    let lib_path_str = lib_dir.to_str().expect("Library path is not valid UTF-8");
-
-    // 3. Tell rustc where to find the library
-    //    'native=' specifies a directory for native libraries.
-    println!("cargo:rustc-link-search=native={}", lib_path_str);
-
-    // 4. Tell rustc to link the static library
-    //    'static=' links a static library. The name 'jartis' is derived
-    //    from 'libjartis.a' by removing the 'lib' prefix and '.a' suffix.
-    println!("cargo:rustc-link-lib=static=jartis");
-
-    // 5. (Optional but Recommended) Re-run build script if the library changes
-    let lib_file_path = lib_dir.join("libjartis.a");
-
-    if !lib_file_path.exists() {
-        panic!(
-            "Library file libjartis.a does not exist in build/ directory ({})",
-            lib_file_path.display()
-        );
-    }
-    println!("cargo:rerun-if-changed={}", lib_file_path.display());
-
-    // Add rerun-if-changed for the build directory itself, in case the file is replaced
-    println!("cargo:rerun-if-changed={}", lib_dir.display());
 
     let arm_embedded_dir = env!("GCC_ARM_EMBEDDED_TOOLCHAIN");
     let c_file_path = PathBuf::from(

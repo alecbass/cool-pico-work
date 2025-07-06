@@ -22,6 +22,25 @@ jartis = { path = "../jartis" }
 fugit = { workspace = true }
 heapless = { workspace = true }
 
+# CYW43 WiFi driver
+embassy-embedded-hal = { workspace = true }
+embassy-sync = { workspace = true }
+embassy-executor = { workspace = true }
+embassy-time = { workspace = true }
+embassy-rp = { workspace = true }
+embassy-usb = { workspace = true }
+embassy-net = { workspace = true }
+embassy-net-wiznet = { workspace = true }
+embassy-futures = { workspace = true }
+embassy-usb-logger = { workspace = true }
+cyw43 = { workspace = true }
+cyw43-pio = { workspace = true }
+static_cell = { workspace = true }
+critical-section = { workspace = true }
+defmt = { workspace = true }
+defmt-rtt = { workspace = true }
+panic-probe = { workspace = true }
+
 # cargo build/run
 [profile.dev]
 codegen-units = 1

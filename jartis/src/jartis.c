@@ -1,3 +1,4 @@
+#include <hardware/irq.h>
 #include <stdio.h>
 
 #include "pico/stdlib.h"
@@ -6,24 +7,42 @@
 // const char ssid[] = "A Network";
 // const char pass[] = "A Password";
 
-// NOTE: For some reason, Jartis cannot compile without the _fini symbol
-// Taken from 
-/* Make sure you have C linkage when defining in c++ file */
-// extern "C"
-// void _fini()
-// {
-//     /* Either leave empty, or infinite loop here */
-//     while (true)
-//         __asm volatile ("NOP");
-// }
-
 int connectToWifi() {
     stdio_init_all();
-    printf("yoooo lol\n");
+    printf("yooooeeeee lol\n");
+
+    // gpio_init(25);
+    //
+    // cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+    // sleep_ms(250);
+    // cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+    // sleep_ms(250);
+    
+    // NOTE(alec): I think (THINK) that cortex-m-rt's entry entrypoint
+    // https://github.com/rust-embedded/cortex-m/blob/master/cortex-m-rt/src/lib.rs
+    // is taking the interrupt which the C side of things expects to be free when calling
+    // cyw43_arch_init
+
+
+    for (uint num = 0; num <= 51; num++ ) {
+        bool hasClaimed = user_irq_is_claimed(num);
+        printf("irq %d claimed: %d\n", num, hasClaimed);
+    }
+    uint irqNum = 0;
+    user_irq_claim(irqNum);
 
     if (cyw43_arch_init()) {
-        return 1;
+        printf("Wi-Fi init failed");
+        return -1;
     }
+
+    while (true) {
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+        sleep_ms(1000);
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+        sleep_ms(1000);
+    }
+
     // if (cyw43_arch_init_with_country(CYW43_COUNTRY_UK)) {
     //     return 1;
     // }
@@ -39,3 +58,7 @@ int connectToWifi() {
     return 24;
 }
 
+int main() {
+    connectToWifi();
+    return 0;
+}
