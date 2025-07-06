@@ -19,6 +19,7 @@ SECTIONS {
     } > BOOT2
 
     PROVIDE(__logical_binary_start = LOADADDR(.text));
+    PROVIDE(__binary_info_header_end = __etext);
 
     /* ## Sections in RAM */
     /* ### .data */
@@ -78,6 +79,7 @@ SECTIONS {
         __end__ = __sheap;
         end = __end__;
         KEEP(*(.c_heap*))
+        __HeapLimit = .;
     } > RAM
 
     /* Start and end symbols must be word-aligned */
@@ -107,4 +109,23 @@ SECTIONS {
     __StackTop = ORIGIN(SCRATCH_Y) + LENGTH(SCRATCH_Y);
     __StackOneBottom = __StackOneTop - SIZEOF(.stack1_dummy);
     __StackBottom = __StackTop - SIZEOF(.stack_dummy);
+    PROVIDE(__stack = __StackTop);
+
+    /* picolibc and LLVM */
+    PROVIDE (__heap_start = __end__);
+    PROVIDE (__heap_end = __HeapLimit);
+    PROVIDE( __tls_align = MAX(ALIGNOF(.tdata), ALIGNOF(.tbss)) );
+    PROVIDE( __tls_size_align = (__tls_size + __tls_align - 1) & ~(__tls_align - 1));
+    PROVIDE( __arm32_tls_tcb_offset = MAX(8, __tls_align) );
+
+    /* llvm-libc */
+    PROVIDE (_end = __end__);
+    PROVIDE (__llvm_libc_heap_limit = __HeapLimit);
+
+    /* Check if data + heap + stack exceeds RAM limit */
+    ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed")
+
+    /* cortex-m-rt link.x.in places it in a different location I think */
+    /* ASSERT( __binary_info_header_end - __logical_binary_start <= 256, "Binary info must be in first 256 bytes of the binary") */
+    /* todo assert on extra code */
 } INSERT BEFORE .text;
