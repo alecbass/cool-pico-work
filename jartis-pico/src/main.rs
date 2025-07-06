@@ -12,23 +12,18 @@ use bsp::hal::sio::Sio;
 use bsp::hal::watchdog::Watchdog;
 use cortex_m::delay::Delay;
 use cortex_m_rt::exception;
-use embassy_executor::Executor;
+use fugit::RateExtU32;
 use rp_pico as bsp;
 
 mod rfid_flasher;
 
 #[cfg(feature = "wireless")]
 mod wireless;
-use static_cell::StaticCell;
-use wireless::wireless_main;
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
 
 const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
-
-#[exception]
-unsafe fn DefaultHandler(_irqn: i16) {}
 
 #[entry]
 fn main() -> ! {
@@ -66,6 +61,10 @@ fn main() -> ! {
 
     #[cfg(feature = "wireless")]
     {
+        use embassy_executor::Executor;
+        use static_cell::StaticCell;
+        use wireless::wireless_main;
+
         // Create static executor
         static EXECUTOR: StaticCell<Executor> = StaticCell::new();
         let executor = EXECUTOR.init(Executor::new());

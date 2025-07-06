@@ -8,12 +8,14 @@ use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIO0};
 use embassy_rp::pio::{InterruptHandler, Pio};
-use embassy_time::{Duration, Timer};
+use embedded_hal::digital::OutputPin;
 use fugit::RateExtU32;
 use jartis::uart::{Uart, UartPins};
 use rp_pico::Pins;
 use rp_pico::hal::Clock;
 use rp_pico::hal::clocks::ClocksManager;
+use rp_pico::hal::gpio::bank0::Gpio23;
+use rp_pico::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullType};
 use rp_pico::hal::gpio::{
     FunctionUart, PullNone,
     bank0::{Gpio0, Gpio1},
@@ -30,7 +32,11 @@ bind_interrupts!(struct Irqs {
 
 #[embassy_executor::task]
 async fn cyw43_task(
-    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>,
+    runner: cyw43::Runner<
+        'static,
+        Pin<Gpio23, FunctionSioOutput, PullDown>,
+        PioSpi<'static, PIO0, 0, DMA_CH0>,
+    >,
 ) -> ! {
     runner.run().await
 }
@@ -58,23 +64,24 @@ pub async fn wireless_main(
         )
         .unwrap();
 
-    writeln!(uart, "hiiii").unwrap();
-    // unsafe {
-    //     loop {
-    //         writeln!(uart, "Connecting to wifi").unwrap();
-    //         delay.delay_ms(200);
-    //
-    //         let r = connectToWifi();
-    //         writeln!(uart, "Connect to wifi result: {r}").unwrap();
-    //     }
-    // }
+    writeln!(uart, "hiiii yeah").unwrap();
 
     let fw = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
 
+    // writeln!(uart, "{fw:?}").unwrap();
+    // writeln!(uart, "{clm:?}").unwrap();
+
+    for i in 0..5 {
+        writeln!(uart, "hiiii {i}").unwrap();
+    }
+
     let p = embassy_rp::init(Default::default());
-    let pwr = Output::new(p.PIN_23, Level::Low);
-    let cs = Output::new(p.PIN_25, Level::High);
+    // let pwr = Output::new(p.PIN_23, Level::Low); // embassy
+    let mut pwr = pins.b_power_save.into_push_pull_output(); // rp-pico
+    pwr.set_low().unwrap();
+    let cs = Output::new(p.PIN_25, Level::High); // embassy
+    // let cs = pins.led.into_push_pull_output().set_high(); // rp-pico
     let mut pio = Pio::new(p.PIO0, Irqs);
     let spi = PioSpi::new(
         &mut pio.common,
@@ -87,6 +94,8 @@ pub async fn wireless_main(
         p.DMA_CH0,
     );
 
+    writeln!(uart, "again!!!!").unwrap();
+
     static STATE: StaticCell<cyw43::State> = StaticCell::new();
     let state = STATE.init(cyw43::State::new());
     let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
@@ -97,14 +106,15 @@ pub async fn wireless_main(
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
-    let delay = Duration::from_secs(1);
     loop {
-        info!("led on!");
-        control.gpio_set(0, true).await;
-        Timer::after(delay).await;
-
-        info!("led off!");
-        control.gpio_set(0, false).await;
-        Timer::after(delay).await;
+        writeln!(uart, "hiiiiee").unwrap();
+        delay.delay_ms(250);
+        // info!("led on!");
+        // control.gpio_set(0, true).await;
+        // Timer::after(delay).await;
+        //
+        // info!("led off!");
+        // control.gpio_set(0, false).await;
+        // Timer::after(delay).await;
     }
 }
