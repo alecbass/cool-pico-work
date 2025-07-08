@@ -34,7 +34,7 @@ embassy-net = { version = "0.7.0", features = ["defmt", "icmp", "tcp", "udp", "r
 embassy-net-wiznet = { version = "0.2.0", features = ["defmt"] }
 embassy-futures = "0.1.0"
 embassy-usb-logger = "0.4.0"
-cyw43 = { version = "0.3.0", features = ["defmt", "firmware-logs"] }
+cyw43 = { version = "0.3.0", features = ["defmt", "firmware-logs", "bluetooth"] }
 cyw43-pio = { version = "0.4.0", features = ["defmt"] }
 static_cell = "2.1"
 

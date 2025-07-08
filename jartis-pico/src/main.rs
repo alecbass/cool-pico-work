@@ -11,8 +11,6 @@ use bsp::hal::pac;
 use bsp::hal::sio::Sio;
 use bsp::hal::watchdog::Watchdog;
 use cortex_m::delay::Delay;
-use cortex_m_rt::exception;
-use fugit::RateExtU32;
 use rp_pico as bsp;
 
 mod rfid_flasher;
@@ -27,38 +25,6 @@ const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 #[entry]
 fn main() -> ! {
-    // Grab our singleton objects
-    let mut pac = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
-
-    // Set up the watchdog driver - needed by the clock setup code
-    let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    let sio = Sio::new(pac.SIO);
-
-    // External high-speed crystal on the pico board is 12Mhz
-    let clocks = init_clocks_and_plls(
-        EXTERNAL_XTAL_FREQ_HZ,
-        pac.XOSC,
-        pac.CLOCKS,
-        pac.PLL_SYS,
-        pac.PLL_USB,
-        &mut pac.RESETS,
-        &mut watchdog,
-    )
-    .ok()
-    .unwrap();
-
-    // Lets us wait for fixed periods of time
-    let delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-
-    // Set the pins to their default state
-    let pins = Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut pac.RESETS,
-    );
-
     #[cfg(feature = "wireless")]
     {
         use embassy_executor::Executor;
@@ -69,16 +35,61 @@ fn main() -> ! {
         static EXECUTOR: StaticCell<Executor> = StaticCell::new();
         let executor = EXECUTOR.init(Executor::new());
 
+        // Calling STATE.init() panics, but STATE.init_with() doth not
+        static STATE: StaticCell<cyw43::State> = StaticCell::new();
+        let state = STATE.init_with(cyw43::State::new);
+
+        let embassy_peripherals = embassy_rp::init(Default::default());
+
+        // Grab our singleton objects
+        let mut pac = pac::Peripherals::take().unwrap();
+        let core = pac::CorePeripherals::take().unwrap();
+
+        // Set up the watchdog driver - needed by the clock setup code
+        let mut watchdog = Watchdog::new(pac.WATCHDOG);
+        let sio = Sio::new(pac.SIO);
+
+        // External high-speed crystal on the pico board is 12Mhz
+        let clocks = init_clocks_and_plls(
+            EXTERNAL_XTAL_FREQ_HZ,
+            pac.XOSC,
+            pac.CLOCKS,
+            pac.PLL_SYS,
+            pac.PLL_USB,
+            &mut pac.RESETS,
+            &mut watchdog,
+        )
+        .ok()
+        .unwrap();
+
+        // Lets us wait for fixed periods of time
+        let delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+
+        // Set the pins to their default state
+        let pins = Pins::new(
+            pac.IO_BANK0,
+            pac.PADS_BANK0,
+            sio.gpio_bank0,
+            &mut pac.RESETS,
+        );
+
         executor.run(|spawner| {
             spawner.must_spawn(wireless_main(
-                spawner, pac.UART0, pac.RESETS, clocks, pins, delay,
+                spawner,
+                pac.UART0,
+                pac.RESETS,
+                clocks,
+                pins,
+                delay,
+                state,
+                embassy_peripherals,
             ));
         });
     }
 
     #[cfg(feature = "rfid_flasher")]
     {
-        rfid_flasher_main(pac.UART0, pac.I2C0, &mut pac.RESETS, clocks, pins, delay)
+        // rfid_flasher_main(pac.UART0, pac.I2C0, &mut pac.RESETS, clocks, pins, delay)
     }
 
     loop {}

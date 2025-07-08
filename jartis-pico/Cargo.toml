@@ -61,7 +61,7 @@ wireless = [
   "dep:critical-section",
   "dep:defmt",
   "dep:defmt-rtt",
-  "dep:panic-probe",
+  "dep:panic-probe"
 ]
 
 # cargo build/run
