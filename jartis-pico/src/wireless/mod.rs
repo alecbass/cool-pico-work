@@ -67,18 +67,12 @@ pub async fn wireless_main(
         )
         .unwrap();
 
-    writeln!(uart, "hiiii yeah").unwrap();
-
-    let fw = include_bytes!("../../../cyw43/43439A0.bin");
+    let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
-
-    delay.delay_ms(500);
 
     // let pwr = Output::new(embassy_peripherals.PIN_23, Level::Low); // embassy
     let mut pwr = pins.b_power_save.into_push_pull_output(); // rp-pico
-    writeln!(uart, "got power pin").unwrap();
     pwr.set_low().unwrap();
-    writeln!(uart, "set power pin to low").unwrap();
 
     let cs = Output::new(embassy_peripherals.PIN_25, Level::High); // embassy
     writeln!(uart, "got embassy pin 25").unwrap();
@@ -97,8 +91,8 @@ pub async fn wireless_main(
     );
     writeln!(uart, "got piospi").unwrap();
 
-    let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
-    writeln!(uart, "made new cyw43").unwrap();
+    let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, cyw43_firmware).await;
+    writeln!(uart, "made cyw43").unwrap();
     unwrap!(spawner.spawn(cyw43_task(runner)));
     writeln!(uart, "spawned runner!!!!").unwrap();
 
