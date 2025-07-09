@@ -1,6 +1,7 @@
 use core::fmt::Write;
 
 use cortex_m::delay::Delay;
+use cyw43::SpiBusCyw43;
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
@@ -16,15 +17,19 @@ use panic_probe as _;
 use rp_pico::Pins;
 use rp_pico::hal::Clock;
 use rp_pico::hal::clocks::ClocksManager;
+use rp_pico::hal::gpio;
 use rp_pico::hal::gpio::bank0::Gpio23;
-use rp_pico::hal::gpio::{FunctionSioOutput, Pin, PullDown};
+use rp_pico::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
 use rp_pico::hal::gpio::{
     FunctionUart, PullNone,
     bank0::{Gpio0, Gpio1},
 };
+use rp_pico::hal::pac;
+use rp_pico::hal::prelude::*;
+use rp_pico::hal::spi;
 use rp_pico::hal::uart::UartPeripheral;
 use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
-use rp_pico::pac::{RESETS, UART0};
+use rp_pico::pac::{RESETS, SPI0, UART0};
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
@@ -42,6 +47,35 @@ async fn cyw43_task(
     runner.run().await
 }
 
+type SpiType = spi::Spi<
+    spi::Disabled,
+    SPI0,
+    (
+        Pin<gpio::bank0::Gpio3, gpio::FunctionSpi, PullNone>,
+        Pin<gpio::bank0::Gpio4, gpio::FunctionSpi, PullUp>,
+        Pin<gpio::bank0::Gpio2, gpio::FunctionSpi, PullNone>,
+    ),
+>;
+
+/// Wrapper for the SPI bus that implements the `SpiBusCyw43`
+/// This is only its own struct due to orphan implementation rules
+pub struct CustomSpiWrapper {
+    spi: SpiType,
+}
+
+impl SpiBusCyw43 for CustomSpiWrapper {
+    async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
+        let spi = &self.spi;
+        let (device, pins) = spi.free();
+
+        0
+    }
+
+    async fn cmd_write(&mut self, write: &[u32]) -> u32 {}
+
+    async fn wait_for_event(&mut self) {}
+}
+
 #[embassy_executor::task]
 pub async fn wireless_main(
     spawner: Spawner,
@@ -49,6 +83,7 @@ pub async fn wireless_main(
     mut resets: RESETS,
     clocks: ClocksManager,
     pins: Pins,
+    spi0: SPI0,
     mut delay: Delay,
     state: &'static mut cyw43::State,
     embassy_peripherals: Peripherals,
@@ -67,6 +102,16 @@ pub async fn wireless_main(
         )
         .unwrap();
 
+    // Set up our SPI pins into the correct mode
+    let spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio2.reconfigure();
+    let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio3.reconfigure();
+    let spi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.gpio4.reconfigure();
+    let spi_cs = pins.gpio5.into_push_pull_output();
+
+    // Create the SPI driver instance for the SPI0 device
+    let spi = spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi, spi_miso, spi_sclk));
+    let spi_wrapper = CustomSpiWrapper { spi };
+
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
 
@@ -76,22 +121,24 @@ pub async fn wireless_main(
 
     info!("oh my");
 
-    let cs = Output::new(embassy_peripherals.PIN_25, Level::High); // embassy
-    writeln!(uart, "got embassy pin 25").unwrap();
-    // let cs = pins.led.into_push_pull_output().set_high(); // rp-pico
-    let mut pio = Pio::new(embassy_peripherals.PIO0, Irqs);
-    writeln!(uart, "got pio").unwrap();
-    let spi = PioSpi::new(
-        &mut pio.common,
-        pio.sm0,
-        DEFAULT_CLOCK_DIVIDER,
-        pio.irq0,
-        cs,
-        embassy_peripherals.PIN_24,
-        embassy_peripherals.PIN_29,
-        embassy_peripherals.DMA_CH0,
-    );
+    // let cs = Output::new(embassy_peripherals.PIN_25, Level::High); // embassy
+    // writeln!(uart, "got embassy pin 25").unwrap();
+    // // let cs = pins.led.into_push_pull_output().set_high(); // rp-pico
+    // let mut pio = Pio::new(embassy_peripherals.PIO0, Irqs);
+    // writeln!(uart, "got pio").unwrap();
+    // let spi = PioSpi::new(
+    //     &mut pio.common,
+    //     pio.sm0,
+    //     DEFAULT_CLOCK_DIVIDER,
+    //     pio.irq0,
+    //     cs,
+    //     embassy_peripherals.PIN_24,
+    //     embassy_peripherals.PIN_29,
+    //     embassy_peripherals.DMA_CH0,
+    // );
     writeln!(uart, "got piospi").unwrap();
+
+    // TODO: Look at implementing SpiBusCyw43 for rp2040-hal's PIO
 
     let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, cyw43_firmware).await;
     writeln!(uart, "made cyw43").unwrap();

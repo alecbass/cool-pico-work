@@ -1094,6 +1094,7 @@ version = "0.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+ "critical-section",
  "cyw43",
  "cyw43-pio",
  "defmt 1.0.1",
@@ -1114,7 +1115,6 @@ dependencies = [
  "heapless",
  "jartis",
  "panic-probe",
- "rp-pac",
  "rp-pico",
  "static_cell",
 ]
