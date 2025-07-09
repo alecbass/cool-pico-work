@@ -23,21 +23,21 @@ fugit = { workspace = true }
 heapless = { workspace = true }
 
 # CYW43 Wireless Functionality
-# rp-pac = { version = "7.0.0", features = ["rp2040", "rt"] }
-# embassy-embedded-hal = { version = "0.3.0",  features = ["defmt"] }
-# embassy-sync = { version = "0.7.0", features = ["defmt"] }
-# embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-# embassy-time = { version = "0.4.0",  features = ["defmt", "defmt-timestamp-uptime"] }
-# # Disable the "rt" feature to let cortex-m-rt populate the INTERRUPTS symbol
-# embassy-rp = { version = "0.4.0", features = ["defmt", "unstable-pac", "time-driver", "rp2040"], default-features = false }
-# embassy-usb = { version = "0.4.0", features = ["defmt"] }
-# embassy-net = { version = "0.7.0", features = ["defmt", "icmp", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns", "proto-ipv4", "proto-ipv6", "multicast"] }
-# embassy-net-wiznet = { version = "0.2.0", features = ["defmt"] }
-# embassy-futures = "0.1.0"
-# embassy-usb-logger = "0.4.0"
-# cyw43 = { version = "0.3.0", features = ["defmt", "firmware-logs", "bluetooth"] }
-# cyw43-pio = { version = "0.4.0", features = ["defmt"] }
-# static_cell = "2.1"
+rp-pac = { version = "7.0.0", features = ["rp2040", "rt"], optional = true }
+embassy-embedded-hal = { version = "0.3.0",  features = ["defmt"], optional = true }
+embassy-sync = { version = "0.7.0", features = ["defmt"], optional = true }
+embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"], optional = true }
+embassy-time = { version = "0.4.0",  features = ["defmt", "defmt-timestamp-uptime"], optional = true }
+# Disable the "rt" feature to let cortex-m-rt populate the INTERRUPTS symbol
+embassy-rp = { version = "0.4.0", features = ["defmt", "unstable-pac", "time-driver", "rp2040"], default-features = false, optional = true }
+embassy-usb = { version = "0.4.0", features = ["defmt"], optional = true }
+embassy-net = { version = "0.7.0", features = ["defmt", "icmp", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns", "proto-ipv4", "proto-ipv6", "multicast"], optional = true }
+embassy-net-wiznet = { version = "0.2.0", features = ["defmt"], optional = true }
+embassy-futures = { version = "0.1.0", optional = true }
+embassy-usb-logger = { version = "0.4.0", optional = true }
+cyw43 = { version = "0.3.0", features = ["defmt", "firmware-logs", "bluetooth"], optional = true }
+cyw43-pio = { version = "0.4.0", features = ["defmt"], optional = true }
+static_cell = { version = "2.1", optional = true }
 
 # Logging
 defmt = { workspace = true }
