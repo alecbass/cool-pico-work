@@ -21,23 +21,6 @@ embedded-hal-nb = "1.0.0"
 fugit = "0.3.7"
 heapless = "0.8.0"
 
-# CYW43 Wireless Functionality
-# rp-pac = { version = "7.0.0", features = ["rp2040", "rt"] }
-# embassy-embedded-hal = { version = "0.3.0",  features = ["defmt"] }
-# embassy-sync = { version = "0.7.0", features = ["defmt"] }
-# embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-# embassy-time = { version = "0.4.0",  features = ["defmt", "defmt-timestamp-uptime"] }
-# # Disable the "rt" feature to let cortex-m-rt populate the INTERRUPTS symbol
-# embassy-rp = { version = "0.4.0", features = ["defmt", "unstable-pac", "time-driver", "rp2040"], default-features = false }
-# embassy-usb = { version = "0.4.0", features = ["defmt"] }
-# embassy-net = { version = "0.7.0", features = ["defmt", "icmp", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns", "proto-ipv4", "proto-ipv6", "multicast"] }
-# embassy-net-wiznet = { version = "0.2.0", features = ["defmt"] }
-# embassy-futures = "0.1.0"
-# embassy-usb-logger = "0.4.0"
-# cyw43 = { version = "0.3.0", features = ["defmt", "firmware-logs", "bluetooth"] }
-# cyw43-pio = { version = "0.4.0", features = ["defmt"] }
-# static_cell = "2.1"
-
 # NOTE: Patching this overrides rp2040-hal's cortex-m version which has free() as FnOnce(&CriticalSection)
 # [patch.crates-io]
 # Currently matching the 0.7.2 version required by rp2040-hal
