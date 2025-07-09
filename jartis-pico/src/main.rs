@@ -11,6 +11,9 @@ use bsp::hal::pac;
 use bsp::hal::sio::Sio;
 use bsp::hal::watchdog::Watchdog;
 use cortex_m::delay::Delay;
+use defmt::*;
+use defmt_rtt as _;
+use panic_probe as _;
 use rp_pico as bsp;
 
 mod rfid_flasher;
@@ -25,6 +28,7 @@ const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 #[entry]
 fn main() -> ! {
+    info!("Program start warn");
     #[cfg(feature = "wireless")]
     {
         use embassy_executor::Executor;
@@ -39,7 +43,9 @@ fn main() -> ! {
         static STATE: StaticCell<cyw43::State> = StaticCell::new();
         let state = STATE.init_with(cyw43::State::new);
 
+        info!("EEEEEEEEEEEEE");
         let embassy_peripherals = embassy_rp::init(Default::default());
+        info!("OOOOOOOOOOOOO");
 
         // Grab our singleton objects
         let mut pac = pac::Peripherals::take().unwrap();

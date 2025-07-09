@@ -3,6 +3,7 @@ use core::fmt::Write;
 use cortex_m::delay::Delay;
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
+use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIO0};
@@ -12,6 +13,7 @@ use embassy_time::{Duration, Timer};
 use embedded_hal::digital::OutputPin;
 use fugit::RateExtU32;
 use jartis::uart::{Uart, UartPins};
+use panic_probe as _;
 use rp_pico::Pins;
 use rp_pico::hal::Clock;
 use rp_pico::hal::clocks::ClocksManager;
@@ -24,7 +26,6 @@ use rp_pico::hal::gpio::{
 use rp_pico::hal::uart::UartPeripheral;
 use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
 use rp_pico::pac::{RESETS, UART0};
-use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
@@ -73,6 +74,8 @@ pub async fn wireless_main(
     // let pwr = Output::new(embassy_peripherals.PIN_23, Level::Low); // embassy
     let mut pwr = pins.b_power_save.into_push_pull_output(); // rp-pico
     pwr.set_low().unwrap();
+
+    info!("oh my");
 
     let cs = Output::new(embassy_peripherals.PIN_25, Level::High); // embassy
     writeln!(uart, "got embassy pin 25").unwrap();

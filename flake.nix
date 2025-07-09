@@ -42,7 +42,8 @@
             libftdi1
             jimtcl # To compile OpenOCD
 
-            neovim
+            neovim # IDE
+            probe-rs-tools # For debugging
           ]
           ++ nixpkgs.lib.optionals (pkgs.stdenv.isDarwin) [
             libiconv

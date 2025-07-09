@@ -31,3 +31,9 @@ This repository contains some programs ready to flash onto a PICO. To run them, 
 
 # TODO
 Make the RFID_FLASHER program work with classic RFID tags
+
+# Mounting a USB on NixOS
+* Have udisks2 installed with `services.udisks2.enable = true;` in your configuration
+* Find the device with `lsblk` and mount it with `udisksctl mount -b /dev/sda1`
+* You can also use `lsusb -t` for more information about connected USB devices
+
