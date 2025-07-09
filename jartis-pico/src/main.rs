@@ -18,8 +18,8 @@ use rp_pico as bsp;
 
 mod rfid_flasher;
 
-#[cfg(feature = "wireless")]
-mod wireless;
+// #[cfg(feature = "wireless")]
+// mod wireless;
 
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
@@ -31,21 +31,21 @@ fn main() -> ! {
     info!("Program start warn");
     #[cfg(feature = "wireless")]
     {
-        use embassy_executor::Executor;
-        use static_cell::StaticCell;
-        use wireless::wireless_main;
-
-        // Create static executor
-        static EXECUTOR: StaticCell<Executor> = StaticCell::new();
-        let executor = EXECUTOR.init(Executor::new());
-
-        // Calling STATE.init() panics, but STATE.init_with() doth not
-        static STATE: StaticCell<cyw43::State> = StaticCell::new();
-        let state = STATE.init_with(cyw43::State::new);
-
-        info!("EEEEEEEEEEEEE");
-        let embassy_peripherals = embassy_rp::init(Default::default());
-        info!("OOOOOOOOOOOOO");
+        // use embassy_executor::Executor;
+        // use static_cell::StaticCell;
+        // use wireless::wireless_main;
+        //
+        // // Create static executor
+        // static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+        // let executor = EXECUTOR.init(Executor::new());
+        //
+        // // Calling STATE.init() panics, but STATE.init_with() doth not
+        // static STATE: StaticCell<cyw43::State> = StaticCell::new();
+        // let state = STATE.init_with(cyw43::State::new);
+        //
+        // info!("EEEEEEEEEEEEE");
+        // let embassy_peripherals = embassy_rp::init(Default::default());
+        // info!("OOOOOOOOOOOOO");
 
         // Grab our singleton objects
         let mut pac = pac::Peripherals::take().unwrap();
@@ -69,7 +69,7 @@ fn main() -> ! {
         .unwrap();
 
         // Lets us wait for fixed periods of time
-        let delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+        let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
         // Set the pins to their default state
         let pins = Pins::new(
@@ -79,18 +79,23 @@ fn main() -> ! {
             &mut pac.RESETS,
         );
 
-        executor.run(|spawner| {
-            spawner.must_spawn(wireless_main(
-                spawner,
-                pac.UART0,
-                pac.RESETS,
-                clocks,
-                pins,
-                delay,
-                state,
-                embassy_peripherals,
-            ));
-        });
+        loop {
+            info!("hehe");
+            delay.delay_ms(1000);
+        }
+
+        // executor.run(|spawner| {
+        //     spawner.must_spawn(wireless_main(
+        //         spawner,
+        //         pac.UART0,
+        //         pac.RESETS,
+        //         clocks,
+        //         pins,
+        //         delay,
+        //         state,
+        //         embassy_peripherals,
+        //     ));
+        // });
     }
 
     #[cfg(feature = "rfid_flasher")]

@@ -23,45 +23,44 @@ fugit = { workspace = true }
 heapless = { workspace = true }
 
 # CYW43 WiFi driver
-embassy-embedded-hal = { workspace = true, optional = true }
-embassy-sync = { workspace = true, optional = true }
-embassy-executor = { workspace = true, optional = true }
-embassy-time = { workspace = true, optional = true }
-embassy-rp = { workspace = true, optional = true }
-embassy-usb = { workspace = true, optional = true }
-embassy-net = { workspace = true, optional = true }
-embassy-net-wiznet = { workspace = true, optional = true }
-embassy-futures = { workspace = true, optional = true }
-embassy-usb-logger = { workspace = true, optional = true }
-cyw43 = { workspace = true, optional = true }
-cyw43-pio = { workspace = true, optional = true }
-static_cell = { workspace = true, optional = true }
-critical-section = { workspace = true, optional = true }
-defmt = { workspace = true, optional = true }
-defmt-rtt = { workspace = true, optional = true }
-panic-probe = { workspace = true, optional = true }
+# rp-pac = { workspace = true, optional = true }
+# embassy-embedded-hal = { workspace = true, optional = true }
+# embassy-sync = { workspace = true, optional = true }
+# embassy-executor = { workspace = true, optional = true }
+# embassy-time = { workspace = true, optional = true }
+# embassy-rp = { workspace = true, optional = true }
+# embassy-usb = { workspace = true, optional = true }
+# embassy-net = { workspace = true, optional = true }
+# embassy-net-wiznet = { workspace = true, optional = true }
+# embassy-futures = { workspace = true, optional = true }
+# embassy-usb-logger = { workspace = true, optional = true }
+# cyw43 = { workspace = true, optional = true }
+# cyw43-pio = { workspace = true, optional = true }
+# static_cell = { workspace = true, optional = true }
+# critical-section = { workspace = true, optional = true }
+defmt = { workspace = true }
+defmt-rtt = { workspace = true }
+panic-probe = { workspace = true }
 
 [features]
 default = ["wireless"]
 rfid_flasher = []
 wireless = [
-  "dep:embassy-embedded-hal",
-  "dep:embassy-sync",
-  "dep:embassy-executor",
-  "dep:embassy-time",
-  "dep:embassy-rp",
-  "dep:embassy-usb",
-  "dep:embassy-net",
-  "dep:embassy-net-wiznet",
-  "dep:embassy-futures",
-  "dep:embassy-usb-logger",
-  "dep:cyw43",
-  "dep:cyw43-pio",
-  "dep:static_cell",
-  "dep:critical-section",
-  "dep:defmt",
-  "dep:defmt-rtt",
-  "dep:panic-probe"
+  # "dep:rp-pac",
+  # "dep:embassy-embedded-hal",
+  # "dep:embassy-sync",
+  # "dep:embassy-executor",
+  # "dep:embassy-time",
+  # "dep:embassy-rp",
+  # "dep:embassy-usb",
+  # "dep:embassy-net",
+  # "dep:embassy-net-wiznet",
+  # "dep:embassy-futures",
+  # "dep:embassy-usb-logger",
+  # "dep:cyw43",
+  # "dep:cyw43-pio",
+  # "dep:static_cell",
+  # "dep:critical-section"
 ]
 
 # cargo build/run
