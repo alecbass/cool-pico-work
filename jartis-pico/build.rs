@@ -29,20 +29,20 @@ fn main() {
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
 
-    let arm_embedded_dir = env!("GCC_ARM_EMBEDDED_TOOLCHAIN");
-    let c_file_path = PathBuf::from(
-        format!("{arm_embedded_dir}/arm-none-eabi/lib/thumb/v6-m/nofp")
-    );
-
-    if !c_file_path.exists() {
-        panic!(
-            "C library file libc.a does not exist in nix store directory ({})",
-            c_file_path.display()
-        );
-    }
-
-    // This tells the -lc flag in .cargo/config.toml where the C library is
-    println!("cargo:rustc-link-search=native={}", c_file_path.display());
-    // println!("cargo:rustc-link-lib=static=c");
-    println!("cargo:rerun-if-changed={}", c_file_path.display());
+    // let arm_embedded_dir = env!("GCC_ARM_EMBEDDED_TOOLCHAIN");
+    // let c_file_path = PathBuf::from(
+    //     format!("{arm_embedded_dir}/arm-none-eabi/lib/thumb/v6-m/nofp")
+    // );
+    //
+    // if !c_file_path.exists() {
+    //     panic!(
+    //         "C library file libc.a does not exist in nix store directory ({})",
+    //         c_file_path.display()
+    //     );
+    // }
+    //
+    // // This tells the -lc flag in .cargo/config.toml where the C library is
+    // println!("cargo:rustc-link-search=native={}", c_file_path.display());
+    // // println!("cargo:rustc-link-lib=static=c");
+    // println!("cargo:rerun-if-changed={}", c_file_path.display());
 }
