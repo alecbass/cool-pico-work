@@ -43,13 +43,12 @@ async fn cyw43_task(
     runner: cyw43::Runner<
         'static,
         Pin<Gpio23, FunctionSioOutput, PullDown>,
-        // Output<'static>,
-        // PioSpi<'static, PIO0, 0, DMA_CH0>,
         CustomSpiWrapper<
             SPI0,
             (
-                Pin<gpio::bank0::Gpio3, gpio::FunctionSpi, PullNone>,
-                Pin<gpio::bank0::Gpio4, gpio::FunctionSpi, PullUp>,
+                // Hardcoded pins as embassy_executor::task does not support generics, sadly
+                Pin<gpio::bank0::Gpio7, gpio::FunctionSpi, PullNone>,
+                Pin<gpio::bank0::Gpio16, gpio::FunctionSpi, PullUp>,
                 Pin<gpio::bank0::Gpio22, gpio::FunctionSpi, PullNone>,
             ),
         >,
@@ -91,7 +90,6 @@ where
 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
-
         let mut buffer = big_buffer_to_u8(read);
         let status = self.spi.read(&mut buffer);
         self.cs.set_high().unwrap();
@@ -101,8 +99,7 @@ where
 
     async fn cmd_write(&mut self, write: &[u32]) -> u32 {
         self.cs.set_low().unwrap();
-
-        let mut buffer = big_buffer_to_u8(write);
+        let buffer = big_buffer_to_u8(write);
         let status = SpiBus::write(&mut self.spi, &buffer).unwrap();
         self.cs.set_high().unwrap();
 
@@ -140,8 +137,8 @@ pub async fn wireless_main(
 
     // Set up our SPI pins into the correct mode
     let spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio22.reconfigure();
-    let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio3.reconfigure();
-    let spi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.gpio4.reconfigure();
+    let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio7.reconfigure(); // SPI0 TX
+    let spi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.gpio16.reconfigure(); // SPIO RX
     let spi_cs = pins.gpio19.into_push_pull_output();
 
     // Create the SPI driver instance for the SPI0 device
