@@ -1,16 +1,19 @@
-use core::fmt::Write;
+use core::fmt::{Write, write};
 
 use cortex_m::delay::Delay;
+use cortex_m::prelude::_embedded_hal_blocking_spi_Write;
 use cyw43::SpiBusCyw43;
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::gpio::{Level, Output};
+use embassy_rp::pac::Interrupt::USBCTRL_IRQ;
 use embassy_rp::peripherals::{DMA_CH0, PIO0};
 use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_rp::{Peripherals, bind_interrupts};
 use embassy_time::{Duration, Timer};
 use embedded_hal::digital::OutputPin;
+use embedded_hal::spi::SpiBus;
 use fugit::RateExtU32;
 use jartis::uart::{Uart, UartPins};
 use panic_probe as _;
@@ -26,7 +29,7 @@ use rp_pico::hal::gpio::{
 };
 use rp_pico::hal::pac;
 use rp_pico::hal::prelude::*;
-use rp_pico::hal::spi;
+use rp_pico::hal::spi::{self, ValidSpiPinout};
 use rp_pico::hal::uart::UartPeripheral;
 use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
 use rp_pico::pac::{RESETS, SPI0, UART0};
@@ -41,37 +44,70 @@ async fn cyw43_task(
         'static,
         Pin<Gpio23, FunctionSioOutput, PullDown>,
         // Output<'static>,
-        PioSpi<'static, PIO0, 0, DMA_CH0>,
+        // PioSpi<'static, PIO0, 0, DMA_CH0>,
+        CustomSpiWrapper<
+            SPI0,
+            (
+                Pin<gpio::bank0::Gpio3, gpio::FunctionSpi, PullNone>,
+                Pin<gpio::bank0::Gpio4, gpio::FunctionSpi, PullUp>,
+                Pin<gpio::bank0::Gpio22, gpio::FunctionSpi, PullNone>,
+            ),
+        >,
     >,
 ) -> ! {
     runner.run().await
 }
 
-type SpiType = spi::Spi<
-    spi::Disabled,
-    SPI0,
-    (
-        Pin<gpio::bank0::Gpio3, gpio::FunctionSpi, PullNone>,
-        Pin<gpio::bank0::Gpio4, gpio::FunctionSpi, PullUp>,
-        Pin<gpio::bank0::Gpio2, gpio::FunctionSpi, PullNone>,
-    ),
->;
-
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
-pub struct CustomSpiWrapper {
-    spi: SpiType,
+pub struct CustomSpiWrapper<D: spi::SpiDevice, P: spi::ValidSpiPinout<D>> {
+    spi: spi::Spi<spi::Enabled, D, P, 8>,
+    cs: Pin<gpio::bank0::Gpio19, FunctionSioOutput, PullDown>,
 }
 
-impl SpiBusCyw43 for CustomSpiWrapper {
+fn big_buffer_to_u8(big_buffer: &[u32]) -> [u8; 1028] {
+    const BUFFER_LENGTH: usize = 1028;
+
+    // Map the array of 32-bit numbers to 16-bits
+    let mut buffer: [u8; BUFFER_LENGTH] = [0; BUFFER_LENGTH];
+
+    for i in 0..big_buffer.len() {
+        let bytes = big_buffer[i].to_be_bytes(); // NOTE: This may have to be little-endian instead
+
+        let little_buffer_i = i * 4; // Account for four bytes being read at a time
+        buffer[little_buffer_i] = bytes[0];
+        buffer[little_buffer_i + 1] = bytes[1];
+        buffer[little_buffer_i + 2] = bytes[2];
+        buffer[little_buffer_i + 3] = bytes[3];
+    }
+
+    buffer
+}
+
+impl<D, P> SpiBusCyw43 for CustomSpiWrapper<D, P>
+where
+    D: spi::SpiDevice,
+    P: spi::ValidSpiPinout<D>,
+{
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
-        let spi = &self.spi;
-        let (device, pins) = spi.free();
+        self.cs.set_low().unwrap();
+
+        let mut buffer = big_buffer_to_u8(read);
+        let status = self.spi.read(&mut buffer);
+        self.cs.set_high().unwrap();
 
         0
     }
 
-    async fn cmd_write(&mut self, write: &[u32]) -> u32 {}
+    async fn cmd_write(&mut self, write: &[u32]) -> u32 {
+        self.cs.set_low().unwrap();
+
+        let mut buffer = big_buffer_to_u8(write);
+        let status = SpiBus::write(&mut self.spi, &buffer).unwrap();
+        self.cs.set_high().unwrap();
+
+        0
+    }
 
     async fn wait_for_event(&mut self) {}
 }
@@ -103,14 +139,23 @@ pub async fn wireless_main(
         .unwrap();
 
     // Set up our SPI pins into the correct mode
-    let spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio2.reconfigure();
+    let spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio22.reconfigure();
     let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio3.reconfigure();
     let spi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.gpio4.reconfigure();
-    let spi_cs = pins.gpio5.into_push_pull_output();
+    let spi_cs = pins.gpio19.into_push_pull_output();
 
     // Create the SPI driver instance for the SPI0 device
     let spi = spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi, spi_miso, spi_sclk));
-    let spi_wrapper = CustomSpiWrapper { spi };
+
+    // Exchange the uninitialised SPI driver for an initialised one
+    let spi = spi.init(
+        &mut resets,
+        clocks.peripheral_clock.freq(),
+        400.kHz(), // card initialization happens at low baud rate
+        embedded_hal::spi::MODE_0,
+    );
+
+    let spi_wrapper = CustomSpiWrapper { spi, cs: spi_cs };
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
@@ -140,7 +185,8 @@ pub async fn wireless_main(
 
     // TODO: Look at implementing SpiBusCyw43 for rp2040-hal's PIO
 
-    let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, cyw43_firmware).await;
+    let (_net_device, mut control, runner) =
+        cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
     writeln!(uart, "made cyw43").unwrap();
     unwrap!(spawner.spawn(cyw43_task(runner)));
     writeln!(uart, "spawned runner!!!!").unwrap();
