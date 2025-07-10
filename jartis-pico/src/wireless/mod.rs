@@ -3,15 +3,8 @@ use core::fmt::{Write, write};
 use cortex_m::delay::Delay;
 use cortex_m::prelude::_embedded_hal_blocking_spi_Write;
 use cyw43::SpiBusCyw43;
-use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_rp::gpio::{Level, Output};
-use embassy_rp::pac::Interrupt::USBCTRL_IRQ;
-use embassy_rp::peripherals::{DMA_CH0, PIO0};
-use embassy_rp::pio::{InterruptHandler, Pio};
-use embassy_rp::{Peripherals, bind_interrupts};
-use embassy_time::{Duration, Timer};
 use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
 use fugit::RateExtU32;
@@ -34,9 +27,11 @@ use rp_pico::hal::uart::UartPeripheral;
 use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
 use rp_pico::pac::{RESETS, SPI0, UART0};
 
-bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => InterruptHandler<PIO0>;
-});
+use embassy_rp as _;
+
+// bind_interrupts!(struct Irqs {
+//     PIO0_IRQ_0 => InterruptHandler<PIO0>;
+// });
 
 #[embassy_executor::task]
 async fn cyw43_task(
@@ -83,6 +78,8 @@ fn big_buffer_to_u8(big_buffer: &[u32]) -> [u8; 1028] {
     buffer
 }
 
+///
+/// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
 impl<D, P> SpiBusCyw43 for CustomSpiWrapper<D, P>
 where
     D: spi::SpiDevice,
@@ -106,7 +103,9 @@ where
         0
     }
 
-    async fn wait_for_event(&mut self) {}
+    async fn wait_for_event(&mut self) {
+        while self.spi.is_busy() {}
+    }
 }
 
 #[embassy_executor::task]
@@ -119,7 +118,6 @@ pub async fn wireless_main(
     spi0: SPI0,
     mut delay: Delay,
     state: &'static mut cyw43::State,
-    embassy_peripherals: Peripherals,
 ) {
     let uart_pins: UartPins<Gpio0, Gpio1> = (
         // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
@@ -194,17 +192,17 @@ pub async fn wireless_main(
         .await;
 
     writeln!(uart, "set power!!!!").unwrap();
-    let delay = Duration::from_secs(1);
+    // let delay = Duration::from_secs(1);
 
     loop {
         writeln!(uart, "hiiiiee").unwrap();
         // delay.delay_ms(250);
         info!("led on!");
         control.gpio_set(0, true).await;
-        Timer::after(delay).await;
+        delay.delay_ms(1000);
 
         info!("led off!");
         control.gpio_set(0, false).await;
-        Timer::after(delay).await;
+        delay.delay_ms(1000);
     }
 }

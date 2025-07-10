@@ -5,7 +5,7 @@ members = ["jartis", "jartis-pico"]
 
 [workspace.dependencies]
 # Disable the "rt" feature to let cortex-m-rt populate the INTERRUPTS symbol (it's a default feature)
-rp-pico = { version = "0.9.0", features = ["rt", "boot2", "critical-section-impl", "rom-func-cache"], default-features = true }
+rp-pico = { version = "0.9.0", features = ["boot2", "critical-section-impl", "rom-func-cache"], default-features = false, path = "../rp-hal-boards/boards/rp-pico" }
 cortex-m-rt = "0.7.5"
 cortex-m = "0.7.7"
 critical-section = "1.1.2"
@@ -22,8 +22,10 @@ fugit = "0.3.7"
 heapless = "0.8.0"
 
 # NOTE: Patching this overrides rp2040-hal's cortex-m version which has free() as FnOnce(&CriticalSection)
-# [patch.crates-io]
+[patch.crates-io]
 # Currently matching the 0.7.2 version required by rp2040-hal
 # cortex-m = { path = "../cortex-m" }
 # cortex-m-rt = { path = "../cortex-m/cortex-m-rt" }
 # rp2040-hal = { git = "https://github.com/rp-rs/rp-hal.git" }
+rp2040-hal = { path = "../rp-hal/rp2040-hal" }
+rp-pico = { path = "../rp-hal-boards/boards/rp-pico" }

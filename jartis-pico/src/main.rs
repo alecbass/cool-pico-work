@@ -28,12 +28,20 @@ const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 #[entry]
 fn main() -> ! {
-    info!("Program start warn");
+    info!("Program start");
+
+    #[cfg(not(feature = "wireless"))]
+    loop {
+        info!("loop");
+    }
+
     #[cfg(feature = "wireless")]
     {
         use embassy_executor::Executor;
         use static_cell::StaticCell;
         use wireless::wireless_main;
+
+        info!("wireless");
 
         // Create static executor
         static EXECUTOR: StaticCell<Executor> = StaticCell::new();
@@ -42,10 +50,6 @@ fn main() -> ! {
         // Calling STATE.init() panics, but STATE.init_with() doth not
         static STATE: StaticCell<cyw43::State> = StaticCell::new();
         let state = STATE.init_with(cyw43::State::new);
-
-        info!("EEEEEEEEEEEEE");
-        let embassy_peripherals = embassy_rp::init(Default::default());
-        info!("OOOOOOOOOOOOO");
 
         // Grab our singleton objects
         let mut pac = pac::Peripherals::take().unwrap();
@@ -81,15 +85,7 @@ fn main() -> ! {
 
         executor.run(|spawner| {
             spawner.must_spawn(wireless_main(
-                spawner,
-                pac.UART0,
-                pac.RESETS,
-                clocks,
-                pins,
-                pac.SPI0,
-                delay,
-                state,
-                embassy_peripherals,
+                spawner, pac.UART0, pac.RESETS, clocks, pins, pac.SPI0, delay, state,
             ));
         });
     }

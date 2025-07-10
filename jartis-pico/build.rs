@@ -23,6 +23,22 @@ fn main() {
         .unwrap();
     println!("cargo:rustc-link-search={}", out.display());
 
+    let does_embassy_memory_mapping_exist = match std::fs::exists(out.join("link-rp.x")) {
+        Ok(result) => result,
+        _ => false,
+    };
+
+    if let Ok(dir) = std::fs::read_dir(out) {
+        println!("DIR: {:?}", dir);
+
+        for item in dir {
+            println!("ITEM: {:?}", item);
+        }
+    }
+    // if does_embassy_memory_mapping_exist {
+    std::fs::remove_file(out.join("link-rp.x")).unwrap();
+    // }
+
     // By default, Cargo will re-run a build script whenever
     // any file in the project changes. By specifying `memory.x`
     // here, we ensure the build script is only re-run when

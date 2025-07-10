@@ -29,7 +29,7 @@ embassy-sync = { version = "0.7.0", features = ["defmt"], optional = true }
 embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"], optional = true }
 embassy-time = { version = "0.4.0",  features = ["defmt", "defmt-timestamp-uptime"], optional = true }
 # Disable the "rt" feature to let cortex-m-rt populate the INTERRUPTS symbol
-embassy-rp = { version = "0.4.0", features = ["rt", "defmt", "unstable-pac", "time-driver", "rp2040", "run-from-ram"], default-features = false, optional = true }
+embassy-rp = { version = "0.4.0", features = ["defmt", "unstable-pac", "time-driver", "rp2040"], default-features = false, optional = true }
 embassy-usb = { version = "0.4.0", features = ["defmt"], optional = true }
 embassy-net = { version = "0.7.0", features = ["defmt", "icmp", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns", "proto-ipv4", "proto-ipv6", "multicast"], optional = true }
 embassy-net-wiznet = { version = "0.2.0", features = ["defmt"], optional = true }
@@ -50,18 +50,18 @@ default = ["wireless"]
 rfid_flasher = []
 wireless = [
   # "dep:rp-pac",
-  "dep:embassy-embedded-hal",
-  "dep:embassy-sync",
-  "dep:embassy-executor",
-  "dep:embassy-time",
-  "dep:embassy-rp",
-  "dep:embassy-usb",
-  "dep:embassy-net",
-  "dep:embassy-net-wiznet",
-  "dep:embassy-futures",
-  "dep:embassy-usb-logger",
+  # "dep:embassy-embedded-hal",
+  # "dep:embassy-sync",
+  # "dep:embassy-executor",
+  # "dep:embassy-time",
+  # "dep:embassy-rp",
+  # "dep:embassy-usb",
+  # "dep:embassy-net",
+  # "dep:embassy-net-wiznet",
+  # "dep:embassy-futures",
+  # "dep:embassy-usb-logger",
   "dep:cyw43",
-  "dep:cyw43-pio", # Causing interrupt symbol failures as it imports embassy-rp with the "rt" feature enabled
+  # "dep:cyw43-pio", # Causing interrupt symbol failures as it imports embassy-rp with the "rt" feature enabled
   "dep:static_cell",
   "dep:critical-section"
 ]
