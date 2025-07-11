@@ -45,16 +45,19 @@ defmt = { workspace = true }
 defmt-rtt = { workspace = true }
 panic-probe = { workspace = true }
 
+[build-dependencies]
+bindgen = "0.71.0"
+
 [features]
-default = ["wireless"]
+default = []
 rfid_flasher = []
 wireless = [
   # "dep:rp-pac",
   # "dep:embassy-embedded-hal",
   # "dep:embassy-sync",
-  # "dep:embassy-executor",
-  # "dep:embassy-time",
-  # "dep:embassy-rp",
+  "dep:embassy-executor",
+  "dep:embassy-time",
+  "dep:embassy-rp",
   # "dep:embassy-usb",
   # "dep:embassy-net",
   # "dep:embassy-net-wiznet",
@@ -63,7 +66,7 @@ wireless = [
   "dep:cyw43",
   # "dep:cyw43-pio", # Causing interrupt symbol failures as it imports embassy-rp with the "rt" feature enabled
   "dep:static_cell",
-  "dep:critical-section"
+  "dep:critical-section",
 ]
 
 # cargo build/run

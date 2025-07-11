@@ -26,17 +26,17 @@ set(CMAKE_CXX_STANDARD 17)
 # 2. SDK Libraries to Build: Semicolon-separated list. Adjust as needed.
 set(PICO_SDK_TARGET_LIBS
     pico_stdlib         # Base library, almost always needed
-    hardware_gpio       # For GPIO control
+    # hardware_gpio       # For GPIO control
     # hardware_timer      # For hardware timers, delays
     # hardware_pwm        # For PWM output
     # hardware_adc        # For ADC input
     # hardware_spi        # For SPI communication
     # hardware_i2c        # For I2C communication
-    # hardware_clocks
+    hardware_clocks
     # pico_multicore      # For second core usage
-    # pico_cyw43_arch     # For wireless - alternate is pico_cyw43_arch_lwip_threadsafe_background
+    pico_cyw43_arch_none     # For wireless - alternate is pico_cyw43_arch_lwip_threadsafe_background
     # pico_cyw43_driver   # For wireless
-    pico_cyw43_arch_lwip_threadsafe_background
+    # pico_cyw43_arch_lwip_threadsafe_background
     # pico_cyw43_arch_lwip_poll
     # pico_lwip           # For wireless, check out the pico-sdk/src/rp2_common/pico_lwip directory for build libraries
     # pico_lwip_arch

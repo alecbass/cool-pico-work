@@ -11,6 +11,7 @@ use bsp::hal::pac;
 use bsp::hal::sio::Sio;
 use bsp::hal::watchdog::Watchdog;
 use cortex_m::delay::Delay;
+use cortex_m_rt as _;
 use defmt::*;
 use defmt_rtt as _;
 use panic_probe as _;
@@ -24,11 +25,24 @@ mod wireless;
 /// This how we transfer the UART into the Interrupt Handler
 // static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
 
+#[link(name = "jartis", kind = "static")]
+unsafe extern "C" {
+    fn connectToWifi() -> core::ffi::c_int;
+}
+
 const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 #[entry]
 fn main() -> ! {
     info!("Program start");
+
+    for i in 0..5 {
+        info!("i: {}", i);
+    }
+
+    unsafe {
+        connectToWifi();
+    }
 
     #[cfg(not(feature = "wireless"))]
     loop {

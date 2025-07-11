@@ -37,6 +37,7 @@
             libusb1
             udev
             minicom
+            ninja # For pico-sdk-rs
 
             # To talk over wires for OpenOCD
             libftdi1

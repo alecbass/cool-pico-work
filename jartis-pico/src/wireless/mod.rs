@@ -33,6 +33,10 @@ use embassy_rp as _;
 //     PIO0_IRQ_0 => InterruptHandler<PIO0>;
 // });
 
+unsafe extern "C" {
+    fn connectToWifi() -> core::ffi::c_int;
+}
+
 #[embassy_executor::task]
 async fn cyw43_task(
     runner: cyw43::Runner<
@@ -132,6 +136,10 @@ pub async fn wireless_main(
             clocks.peripheral_clock.freq(),
         )
         .unwrap();
+
+    unsafe {
+        connectToWifi();
+    }
 
     // Set up our SPI pins into the correct mode
     let spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio22.reconfigure();

@@ -47,18 +47,19 @@ echo "Created static libjartis.a library"
 # Return to the root directory
 cd .. || exit 1
 
-# static_lib_file="build/libjartis.a"
-# static_lib_target_dir="target/thumbv6m-none-eabi/debug/deps/"
-#
-# if [[ ! -f "$static_lib_file" ]]; then
-#     echo "Failed to create static library"
-#     exit 1
-# fi
-#
-# if [[ ! -d "$static_lib_target_dir" ]]; then
-#     # Create a target directory to move the static library into
-#     mkdir -p "$static_lib_target_dir"
-# fi
-#
-# # Make libjartis.a available to be linked to Rust
-# cp "$static_lib_file" "$static_lib_target_dir"
+static_lib_file="build/libjartis.a"
+static_lib_target_dir="target/thumbv6m-none-eabi/debug/deps/"
+
+if [[ ! -f "$static_lib_file" ]]; then
+    echo "Failed to create static library"
+    exit 1
+fi
+
+if [[ ! -d "$static_lib_target_dir" ]]; then
+    # Create a target directory to move the static library into
+    mkdir -p "$static_lib_target_dir"
+fi
+
+# Make libjartis.a available to be linked to Rust
+cp "$static_lib_file" "$static_lib_target_dir"
+echo "Copied static library to target directory"

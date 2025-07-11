@@ -23,42 +23,54 @@ fn main() {
         .unwrap();
     println!("cargo:rustc-link-search={}", out.display());
 
-    let does_embassy_memory_mapping_exist = match std::fs::exists(out.join("link-rp.x")) {
-        Ok(result) => result,
-        _ => false,
-    };
-
-    if let Ok(dir) = std::fs::read_dir(out) {
-        println!("DIR: {:?}", dir);
-
-        for item in dir {
-            println!("ITEM: {:?}", item);
-        }
-    }
-    // if does_embassy_memory_mapping_exist {
-    std::fs::remove_file(out.join("link-rp.x")).unwrap();
-    // }
-
     // By default, Cargo will re-run a build script whenever
     // any file in the project changes. By specifying `memory.x`
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
 
-    // let arm_embedded_dir = env!("GCC_ARM_EMBEDDED_TOOLCHAIN");
-    // let c_file_path = PathBuf::from(
-    //     format!("{arm_embedded_dir}/arm-none-eabi/lib/thumb/v6-m/nofp")
-    // );
-    //
-    // if !c_file_path.exists() {
-    //     panic!(
-    //         "C library file libc.a does not exist in nix store directory ({})",
-    //         c_file_path.display()
-    //     );
-    // }
-    //
-    // // This tells the -lc flag in .cargo/config.toml where the C library is
-    // println!("cargo:rustc-link-search=native={}", c_file_path.display());
-    // // println!("cargo:rustc-link-lib=static=c");
-    // println!("cargo:rerun-if-changed={}", c_file_path.display());
+    // Build Jartis C library
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
+    let lib_dir = manifest_dir.join("build");
+
+    if !lib_dir.exists() {
+        panic!(
+            "Library directory build/ does not exist relative to project root ({})",
+            manifest_dir.display()
+        );
+    }
+
+    let lib_path_str = lib_dir.to_str().expect("Library path is not valid UTF-8");
+    println!("cargo:rustc-link-search=native={}", lib_path_str);
+    println!("cargo:rustc-link-lib=static=jartis");
+
+    let lib_file_path = lib_dir.join("libjartis.a");
+
+    if !lib_file_path.exists() {
+        panic!(
+            "Library file libjartis.a does not exist in build/ directory ({})",
+            lib_file_path.display()
+        );
+    }
+    println!("cargo:rerun-if-changed={}", lib_file_path.display());
+
+    // Add rerun-if-changed for the build directory itself, in case the file is replaced
+    println!("cargo:rerun-if-changed={}", lib_dir.display());
+
+    let arm_embedded_dir = env!("GCC_ARM_EMBEDDED_TOOLCHAIN");
+    let c_file_path = PathBuf::from(
+        format!("{arm_embedded_dir}/arm-none-eabi/lib/thumb/v6-m/nofp")
+    );
+
+    if !c_file_path.exists() {
+        panic!(
+            "C library file libc.a does not exist in nix store directory ({})",
+            c_file_path.display()
+        );
+    }
+
+    // This tells the -lc flag in .cargo/config.toml where the C library is
+    println!("cargo:rustc-link-search=native={}", c_file_path.display());
+    // println!("cargo:rustc-link-lib=static=c");
+    println!("cargo:rerun-if-changed={}", c_file_path.display());
 }
