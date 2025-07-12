@@ -54,6 +54,9 @@
 
           RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
           GCC_ARM_EMBEDDED_TOOLCHAIN = "${gcc-arm-embedded-13}";
+          # LIBCLANG_PATH = "${pkgs.llvmPackages_20.libclang.lib}/lib";
+          LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
+
         };
       }
     );

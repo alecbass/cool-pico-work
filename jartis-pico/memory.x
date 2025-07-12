@@ -10,8 +10,12 @@ EXTERN(BOOT2_FIRMWARE)
 
 SECTIONS {
     /* ### Boot loader */
-    .boot2 ORIGIN(BOOT2) :
-    {
-        KEEP(*(.boot2));
+    .boot2 : {
+        __boot2_start__ = .;
+        KEEP (*(.boot2))
+        __boot2_end__ = .;
     } > BOOT2
+
+    ASSERT(__boot2_end__ - __boot2_start__ <= 0x100,
+        "ERROR: Pico second stage bootloader must be within 256 bytes in size")
 } INSERT BEFORE .text;

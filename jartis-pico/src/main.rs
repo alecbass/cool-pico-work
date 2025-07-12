@@ -14,6 +14,7 @@ use cortex_m::delay::Delay;
 use cortex_m_rt as _;
 use defmt::*;
 use defmt_rtt as _;
+use embedded_hal::digital::OutputPin;
 use panic_probe as _;
 use rp_pico as bsp;
 
@@ -21,14 +22,6 @@ mod rfid_flasher;
 
 #[cfg(feature = "wireless")]
 mod wireless;
-
-/// This how we transfer the UART into the Interrupt Handler
-// static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
-
-#[link(name = "jartis", kind = "static")]
-unsafe extern "C" {
-    fn connectToWifi() -> core::ffi::c_int;
-}
 
 const EXTERNAL_XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
@@ -40,13 +33,60 @@ fn main() -> ! {
         info!("i: {}", i);
     }
 
-    unsafe {
-        connectToWifi();
-    }
-
     #[cfg(not(feature = "wireless"))]
-    loop {
-        info!("loop");
+    {
+        #[link(name = "jartis", kind = "static")]
+        unsafe extern "C" {
+            fn connectToWifi() -> core::ffi::c_int;
+        }
+
+        unsafe {
+            let result = connectToWifi();
+            info!("result: {}", result);
+        }
+
+        // Grab our singleton objects
+        let mut pac = pac::Peripherals::take().unwrap();
+        let core = pac::CorePeripherals::take().unwrap();
+
+        // Set up the watchdog driver - needed by the clock setup code
+        let mut watchdog = Watchdog::new(pac.WATCHDOG);
+        let sio = Sio::new(pac.SIO);
+
+        // External high-speed crystal on the pico board is 12Mhz
+        let clocks = init_clocks_and_plls(
+            EXTERNAL_XTAL_FREQ_HZ,
+            pac.XOSC,
+            pac.CLOCKS,
+            pac.PLL_SYS,
+            pac.PLL_USB,
+            &mut pac.RESETS,
+            &mut watchdog,
+        )
+        .ok()
+        .unwrap();
+
+        // Lets us wait for fixed periods of time
+        let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+
+        // Set the pins to their default state
+        let pins = Pins::new(
+            pac.IO_BANK0,
+            pac.PADS_BANK0,
+            sio.gpio_bank0,
+            &mut pac.RESETS,
+        );
+
+        let mut led_pin = pins.gpio14.into_push_pull_output();
+
+        loop {
+            info!("loop");
+            delay.delay_ms(1000);
+            continue;
+            led_pin.set_high().unwrap();
+            delay.delay_ms(1000);
+            led_pin.set_low().unwrap();
+        }
     }
 
     #[cfg(feature = "wireless")]

@@ -1,3 +1,5 @@
+#include <hardware/gpio.h>
+#include <stdio.h>
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 
@@ -8,11 +10,16 @@ int connectToWifi() {
     stdio_init_all();
     printf("yooooeeeee lol\n");
 
+    /** The pin the custom LED is connected to */
+    const uint LED_PIN = 14;
+    gpio_init(LED_PIN);
+    gpio_set_dir(LED_PIN, GPIO_OUT);
+    gpio_put(LED_PIN, true);
+
     // NOTE(alec): I think (THINK) that cortex-m-rt's entry entrypoint
     // https://github.com/rust-embedded/cortex-m/blob/master/cortex-m-rt/src/lib.rs
     // is taking the interrupt which the C side of things expects to be free when calling
     // cyw43_arch_init
-
 
     if (cyw43_arch_init()) {
         printf("Wi-Fi init failed");
@@ -26,16 +33,6 @@ int connectToWifi() {
         sleep_ms(1000);
     }
 
-    // if (cyw43_arch_init_with_country(CYW43_COUNTRY_UK)) {
-    //     return 1;
-    // }
-    
-    cyw43_arch_enable_sta_mode();
-    
-    // if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000)) {
-    //     printf("failed to connect\n");
-    //     return 1;
-    // }
     printf("connected\n");
 
     return 24;
