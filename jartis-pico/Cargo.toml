@@ -44,12 +44,13 @@ critical-section = { workspace = true, optional = true }
 defmt = { workspace = true }
 defmt-rtt = { workspace = true }
 panic-probe = { workspace = true }
+pio = "0.3.0"
 
 [build-dependencies]
 bindgen = "0.71.0"
 
 [features]
-default = []
+default = ["wireless"]
 rfid_flasher = []
 wireless = [
   # "dep:rp-pac",

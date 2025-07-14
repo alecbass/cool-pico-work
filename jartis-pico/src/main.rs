@@ -38,11 +38,10 @@ fn main() -> ! {
         #[link(name = "jartis", kind = "static")]
         unsafe extern "C" {
             fn connectToWifi() -> core::ffi::c_int;
-        }
-
-        unsafe {
-            let result = connectToWifi();
-            info!("result: {}", result);
+            fn cyw43_arch_init() -> core::ffi::c_int;
+            // fn gpio_init(gpio: core::ffi::c_uint);
+            // fn gpio_set_dir(gpio: core::ffi::c_uint, out: bool);
+            // fn gpio_put(gpio: core::ffi::c_uint, value: bool);
         }
 
         // Grab our singleton objects
@@ -76,6 +75,19 @@ fn main() -> ! {
             sio.gpio_bank0,
             &mut pac.RESETS,
         );
+
+        unsafe {
+            // const LED_PIN: u32 = 14;
+            // const GPIO_OUT: bool = true;
+            // gpio_init(LED_PIN);
+            // gpio_set_dir(LED_PIN, GPIO_OUT);
+            // gpio_put(LED_PIN, true);
+            info!("Initialising CYW43");
+            let cyw43_result = cyw43_arch_init();
+            info!("cyw43_result: {}", cyw43_result);
+            let result = connectToWifi();
+            info!("result: {}", result);
+        }
 
         let mut led_pin = pins.gpio14.into_push_pull_output();
 
@@ -136,6 +148,10 @@ fn main() -> ! {
             sio.gpio_bank0,
             &mut pac.RESETS,
         );
+
+        // info!("init time driver");
+        // let timer = bsp::hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
+        // unsafe { rp_pico_w::embassy_time_driver::init(timer) };
 
         executor.run(|spawner| {
             spawner.must_spawn(wireless_main(

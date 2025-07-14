@@ -1,10 +1,12 @@
 #include <hardware/gpio.h>
+#include <hardware/irq.h>
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 
 // const char ssid[] = "A Network";
 // const char pass[] = "A Password";
+// extern void do_thing();
 
 int connectToWifi() {
     stdio_init_all();
@@ -12,9 +14,14 @@ int connectToWifi() {
 
     /** The pin the custom LED is connected to */
     const uint LED_PIN = 14;
+
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
     gpio_put(LED_PIN, true);
+    // for (int i = 0; i < 10; i++) {
+    //     gpio_put(LED_PIN, i % 2);
+    //     sleep_ms(500);
+    // }
 
     // NOTE(alec): I think (THINK) that cortex-m-rt's entry entrypoint
     // https://github.com/rust-embedded/cortex-m/blob/master/cortex-m-rt/src/lib.rs
