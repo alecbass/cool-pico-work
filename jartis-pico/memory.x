@@ -10,15 +10,15 @@ EXTERN(BOOT2_FIRMWARE)
 
 SECTIONS {
     /* ### Boot loader */
-    /*
-    NOTE: This commented stuff can be removed if embassy-rp remains as a dependency, as it provides the same .boot2 symbol
     .boot2 : {
         __boot2_start__ = .;
-        KEEP (*(.boot2))
+        /* KEEP (*(.boot2)) */ /* embassy-rp already supplies this bit. Revert if we don't need it in the future */
         __boot2_end__ = .;
     } > BOOT2
 
+    PROVIDE(__boot2_start__ = LOADADDR(.boot2));
+    PROVIDE(__boot2_end__ = LOADADDR(.boot2) + SIZEOF(.boot2));
+
     ASSERT(__boot2_end__ - __boot2_start__ <= 0x100,
         "ERROR: Pico second stage bootloader must be within 256 bytes in size")
-    */
 } INSERT BEFORE .text;

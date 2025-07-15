@@ -27,6 +27,7 @@ heapless = "0.8.0"
 # cortex-m = { path = "../cortex-m" }
 # cortex-m-rt = { path = "../cortex-m/cortex-m-rt" }
 # rp2040-hal = { git = "https://github.com/rp-rs/rp-hal.git" }
-rp2040-hal = { path = "../rp-hal/rp2040-hal" }
-rp-pico = { path = "../rp-hal-boards/boards/rp-pico" }
+# rp2040-hal = { path = "../rp-hal/rp2040-hal" }
+# rp-pico = { path = "../rp-hal-boards/boards/rp-pico" }
 # cortex-m-rt = { path = "../cortex-m/cortex-m-rt" }
+# embassy-rp = { path = "../embassy/embassy-rp" }

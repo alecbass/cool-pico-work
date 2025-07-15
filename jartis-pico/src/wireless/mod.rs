@@ -5,9 +5,7 @@ use cyw43::SpiBusCyw43;
 use defmt::*;
 use embassy_executor::Spawner;
 use embedded_hal::digital::OutputPin;
-use embedded_hal::spi::SpiBus;
 use fugit::RateExtU32;
-use jartis::uart::{Uart, UartPins};
 use panic_probe as _;
 use pio::Instruction;
 use pio::InstructionOperands;
@@ -23,22 +21,18 @@ use rp_pico::hal::dma::SingleChannel;
 use rp_pico::hal::dma::Word;
 use rp_pico::hal::gpio;
 use rp_pico::hal::gpio::FunctionPio0;
+use rp_pico::hal::gpio::PullNone;
 use rp_pico::hal::gpio::bank0::Gpio23;
 use rp_pico::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
-use rp_pico::hal::gpio::{
-    FunctionUart, PullNone,
-    bank0::{Gpio0, Gpio1},
-};
 use rp_pico::hal::pio::PIOExt;
 use rp_pico::hal::pio::SM0;
-use rp_pico::hal::prelude::*;
 use rp_pico::hal::spi::{self};
-use rp_pico::hal::uart::UartPeripheral;
-use rp_pico::hal::uart::{DataBits, StopBits, UartConfig};
 use rp_pico::pac::DMA;
 use rp_pico::pac::{PIO0, RESETS, SPI0, UART0};
 
 use embassy_rp as _;
+
+pub mod embassy_timer_driver;
 
 #[embassy_executor::task]
 async fn cyw43_task(
@@ -281,23 +275,27 @@ pub async fn wireless_main(
     mut delay: Delay,
     state: &'static mut cyw43::State,
 ) {
-    let uart_pins: UartPins<Gpio0, Gpio1> = (
-        // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
-        pins.gpio0.reconfigure::<FunctionUart, PullNone>(),
-        // UART RX (characters received by RP2040) on pin 2 (GPIO1)
-        pins.gpio1.reconfigure::<FunctionUart, PullNone>(),
-    );
-
-    let mut uart: Uart<Gpio0, Gpio1> = UartPeripheral::new(uart_device, uart_pins, &mut resets)
-        .enable(
-            UartConfig::new(9600_u32.Hz(), DataBits::Eight, None, StopBits::One),
-            clocks.peripheral_clock.freq(),
-        )
-        .unwrap();
+    // let uart_pins: UartPins<Gpio0, Gpio1> = (
+    //     // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
+    //     pins.gpio0.reconfigure::<FunctionUart, PullNone>(),
+    //     // UART RX (characters received by RP2040) on pin 2 (GPIO1)
+    //     pins.gpio1.reconfigure::<FunctionUart, PullNone>(),
+    // );
+    //
+    // let mut uart: Uart<Gpio0, Gpio1> = UartPeripheral::new(uart_device, uart_pins, &mut resets)
+    //     .enable(
+    //         UartConfig::new(9600_u32.Hz(), DataBits::Eight, None, StopBits::One),
+    //         clocks.peripheral_clock.freq(),
+    //     )
+    //     .unwrap();
 
     //
     // Configure pins fro PioSpi
     //
+
+    info!("Turning on LED");
+    let mut led_pin = pins.gpio14.into_push_pull_output();
+    led_pin.set_high().unwrap();
 
     // Create PIO
     // configure LED pin for Pio0.
