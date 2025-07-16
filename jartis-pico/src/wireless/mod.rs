@@ -31,6 +31,7 @@ use rp_pico::pac::DMA;
 use rp_pico::pac::{PIO0, RESETS, SPI0, UART0};
 
 use embassy_rp as _;
+use embassy_timer_driver as _;
 
 pub mod embassy_timer_driver;
 
@@ -295,7 +296,12 @@ pub async fn wireless_main(
 
     info!("Turning on LED");
     let mut led_pin = pins.gpio14.into_push_pull_output();
+    led_pin.set_interrupt_enabled(gpio::Interrupt::EdgeLow, true); // Remove this
     led_pin.set_high().unwrap();
+
+    loop {
+        cortex_m::asm::wfi();
+    }
 
     // Create PIO
     // configure LED pin for Pio0.
@@ -419,6 +425,7 @@ pub async fn wireless_main(
 
     loop {
         // delay.delay_ms(250);
+        cortex_m::asm::wfi();
         info!("led on!");
         control.gpio_set(0, true).await;
         delay.delay_ms(1000);
