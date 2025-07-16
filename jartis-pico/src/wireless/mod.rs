@@ -299,10 +299,6 @@ pub async fn wireless_main(
     led_pin.set_interrupt_enabled(gpio::Interrupt::EdgeLow, true); // Remove this
     led_pin.set_high().unwrap();
 
-    loop {
-        cortex_m::asm::wfi();
-    }
-
     // Create PIO
     // configure LED pin for Pio0.
     let dio_pin: Pin<_, FunctionPio0, _> = pins.gpio18.into_function();
@@ -380,6 +376,7 @@ pub async fn wireless_main(
     let dma = dma.split(&mut resets);
 
     // Exchange the uninitialised SPI driver for an initialised one
+    info!("initialising SPI...");
     let spi = spi.init(
         &mut resets,
         clocks.peripheral_clock.freq(),
@@ -409,9 +406,10 @@ pub async fn wireless_main(
     let mut pwr = pins.b_power_save.into_push_pull_output();
     pwr.set_low().unwrap();
 
+    info!("initialising cyw43...");
     let (_net_device, mut control, runner) =
         cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
-    info!("made cyw43");
+    info!("initialised cyw43");
     unwrap!(spawner.spawn(cyw43_task(runner)));
     info!("spawned runner!!!!");
 

@@ -175,7 +175,7 @@ impl Driver for JartisDriver {
     fn schedule_wake(&self, at: u64, waker: &Waker) {
         critical_section::with(|cs| {
             let mut queue = self.queue.borrow(cs).borrow_mut();
-            info!("scheduling wake");
+            info!("scheduling wake at {}", at);
 
             if queue.schedule_wake(at, waker) {
                 let mut next = queue.next_expiration(self.now());
