@@ -72,11 +72,6 @@ impl JartisDriver {
             info!("alarm timestamp has passed");
             let fake_alarm = Instant::from_ticks(FAKE_ALARM);
             alarm.timestamp.set(fake_alarm);
-            // alarm0.disable_interrupt();
-            // alarm0.clear_interrupt();
-            // if let Err(_e) = alarm0.schedule_at(fake_alarm) {
-            //     error!("Failed to disarm alarm");
-            // }
 
             return false;
         }
@@ -119,6 +114,10 @@ impl JartisDriver {
             // alarm peripheral has only 32 bits, so might have triggered early
             info!("now: {}    timestamp: {}", now, timestamp);
             if timestamp <= now {
+                // If alarm timestamp has passed the alarm will not fire.
+                // Disarm the alarm and return `false` to indicate that.
+                alarm0.disable_interrupt();
+                alarm0.clear_interrupt();
                 self.trigger_alarm(cs);
             } else {
                 // Not elapsed, arm it again.
@@ -175,7 +174,7 @@ impl Driver for JartisDriver {
     fn schedule_wake(&self, at: u64, waker: &Waker) {
         critical_section::with(|cs| {
             let mut queue = self.queue.borrow(cs).borrow_mut();
-            info!("scheduling wake at {}", at);
+            info!("scheduling wake at {}        now: {}", at, self.now());
 
             if queue.schedule_wake(at, waker) {
                 let mut next = queue.next_expiration(self.now());
@@ -199,12 +198,12 @@ embassy_time_driver::time_driver_impl!(static DRIVER: JartisDriver = JartisDrive
 pub unsafe fn init(mut timer: Timer) {
     // init alarms
     critical_section::with(|cs| {
-        // make sure the alarm is not yet taken,
-        // and leak it, so it can be used safely
         let mut alarm = timer.alarm_0().unwrap();
-        let first_interrupt_schedule = Duration::<u32, 1, 1000000>::from_ticks(1000);
+
+        // Run the interrupt immediately
+        let first_interrupt_schedule = Instant::from_ticks(0);
         alarm
-            .schedule(first_interrupt_schedule)
+            .schedule_at(first_interrupt_schedule)
             .expect("Could not schedule first interrupt");
         alarm.enable_interrupt();
         info!("interrupt enabled!");
