@@ -31,7 +31,6 @@ use rp_pico::pac::DMA;
 use rp_pico::pac::{PIO0, RESETS, SPI0, UART0};
 
 use embassy_rp as _;
-use embassy_timer_driver as _;
 
 pub mod embassy_timer_driver;
 

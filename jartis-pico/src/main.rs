@@ -141,7 +141,10 @@ fn main() -> ! {
 
         info!("init time driver");
         let timer = bsp::hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
-        unsafe { wireless::embassy_timer_driver::init(timer) };
+        unsafe {
+            wireless::embassy_timer_driver::init(timer);
+        };
+        info!("initialised time driver");
 
         executor.run(|spawner| {
             spawner.must_spawn(wireless_main(
