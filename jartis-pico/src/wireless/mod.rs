@@ -148,20 +148,22 @@ where
     /// Write data to peripheral and return status.
     pub async fn write(&mut self, write: &[u32]) -> Result<u32, ()> {
         // NOTE: This is copied directly from cyw43-pio's PioSpi implementation
-        let Some(SpiStateMachine::Running(sm)) = self.sm.take() else {
-            return Err(());
+        let sm = match self.sm.take() {
+            Some(SpiStateMachine::Running(sm)) => sm.stop(),
+            Some(SpiStateMachine::Stopped(sm)) => sm,
+            _ => return Err(()),
         };
 
-        let cell = OnceCell::new();
-        cell.set(SpiStateMachine::Stopped(sm.stop()))
+        // NOTE: This must be set here or the unsafe functions will fail as they rely on self.sm
+        self.sm
+            .set(SpiStateMachine::Stopped(sm))
             .map_err(|_e| ())
             .unwrap();
-        self.sm = cell; // NOTE: This must be set here or the unsafe functions will fail as they rely on self.sm
 
         let write_bits = write.len() * 32 - 1;
         let read_bits = 31;
 
-        trace!("write={} read={}", write_bits, read_bits);
+        info!("write={} read={}", write_bits, read_bits);
 
         unsafe {
             self.sm_set_x(write_bits as u32);
@@ -170,15 +172,15 @@ where
             self.sm_exec_jmp(self.wrap_target);
         }
 
-        let Some(SpiStateMachine::Stopped(sm)) = self.sm.take() else {
-            return Err(());
+        let sm = match self.sm.take() {
+            Some(SpiStateMachine::Running(sm)) => sm,
+            Some(SpiStateMachine::Stopped(sm)) => sm.start(),
+            _ => return Err(()),
         };
-
-        let cell = OnceCell::new();
-        cell.set(SpiStateMachine::Running(sm.start()))
+        self.sm
+            .set(SpiStateMachine::Running(sm))
             .map_err(|_e| ())
             .unwrap();
-        self.sm = cell;
 
         //. Push to DMA
         for word in write {
@@ -186,21 +188,32 @@ where
         }
 
         // Read from DMA
-        Ok(self.rx.read().unwrap_or(0))
+        match self.rx.read() {
+            Some(result) => Ok(result),
+            None => Err(()),
+        }
     }
 
     /// Send command and read response into buffer.
     pub async fn read(&mut self, cmd: u32, read: &mut [u32]) -> Result<u32, ()> {
-        let Some(SpiStateMachine::Running(sm)) = self.sm.take() else {
-            return Err(());
+        let sm = match self.sm.take() {
+            Some(SpiStateMachine::Running(sm)) => sm.stop(),
+            Some(SpiStateMachine::Stopped(sm)) => sm,
+            _ => return Err(()),
         };
-        let sm = sm.stop();
+
+        info!("trying to do thing");
+        self.sm
+            .set(SpiStateMachine::Stopped(sm))
+            .map_err(|_e| ())
+            .unwrap();
+        info!("stopped sm");
 
         let write_bits = 31;
         let read_bits = read.len() * 32 + 32 - 1;
 
-        trace!("cmd_read write={} read={}", write_bits, read_bits);
-        trace!("cmd_read cmd = {:02x} len = {}", cmd, read.len());
+        info!("cmd_read write={} read={}", write_bits, read_bits);
+        info!("cmd_read cmd = {:02x} len = {}", cmd, read.len());
 
         unsafe {
             self.sm_set_y(read_bits as u32);
@@ -209,11 +222,13 @@ where
             self.sm_exec_jmp(self.wrap_target);
         }
 
-        let cell = OnceCell::new();
-        cell.set(SpiStateMachine::Running(sm.start()))
-            .map_err(|_e| ())?;
-        self.sm = cell;
+        let sm = match self.sm.take() {
+            Some(SpiStateMachine::Running(sm)) => sm,
+            Some(SpiStateMachine::Stopped(sm)) => sm.start(),
+            _ => return Err(()),
+        };
 
+        self.sm.set(SpiStateMachine::Running(sm)).map_err(|_e| ())?;
         self.tx.write(cmd);
 
         for _ in 0..read.len() {
@@ -243,7 +258,6 @@ where
 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
-        info!("about to read");
         let status = self.read(write, read).await.unwrap_or(0);
         info!("cmd_read status {}", status);
         self.cs.set_high().unwrap();
@@ -295,7 +309,6 @@ pub async fn wireless_main(
     let dio_pin: Pin<_, FunctionPio0, _> = pins.gpio18.into_function();
     let dio_pin_id = dio_pin.id().num;
 
-    // u
     // Define the CYW43 program, taken from cyw43-pio
     let default_program = pio_asm!(
         ".side_set 1"
@@ -307,6 +320,30 @@ pub async fn wireless_main(
         "jmp x-- lp     side 1"
         // switch directions
         "set pindirs, 0 side 0"
+        "nop            side 0"
+        // read in y-1 bits
+        "lp2:"
+        "in pins, 1     side 1"
+        "jmp y-- lp2    side 0"
+
+        // wait for event and irq host
+        "wait 1 pin 0   side 0"
+        "irq 0          side 0"
+
+        ".wrap"
+    );
+
+    let overclock_program = pio_asm!(
+        ".side_set 1"
+
+        ".wrap_target"
+        // write out x-1 bits
+        "lp:"
+        "out pins, 1    side 0"
+        "jmp x-- lp     side 1"
+        // switch directions
+        "set pindirs, 0 side 0"
+        "nop            side 1"  // necessary for clkdiv=1.
         "nop            side 0"
         // read in y-1 bits
         "lp2:"
@@ -376,7 +413,7 @@ pub async fn wireless_main(
 
     let sm_cell = OnceCell::new();
     sm_cell
-        .set(SpiStateMachine::Stopped(sm))
+        .set(SpiStateMachine::Running(sm.start()))
         .map_err(|_e| ())
         .unwrap();
 

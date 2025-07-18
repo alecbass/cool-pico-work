@@ -140,7 +140,6 @@ impl Driver for JartisDriver {
             trace!("scheduling wake at {}        now: {}", at, self.now());
 
             if queue.schedule_wake(at, waker) {
-                waker.wake_by_ref();
                 let mut next = queue.next_expiration(self.now());
                 trace!("First next to {}   at time {}", next, self.now());
                 while !self.set_alarm(cs, next) {
@@ -148,6 +147,7 @@ impl Driver for JartisDriver {
                     trace!("Re-assigned next to {}    at now time {}", next, self.now());
                 }
                 trace!("did schedule_wake at {} with now time {}", next, self.now());
+                waker.wake_by_ref();
             }
         });
     }

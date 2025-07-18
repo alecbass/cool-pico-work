@@ -34,7 +34,7 @@ embassy-net = { version = "0.7.0", features = ["defmt", "icmp", "tcp", "udp", "r
 embassy-net-wiznet = { version = "0.2.0", features = ["defmt"], optional = true }
 embassy-futures = { version = "0.1.0", optional = true }
 embassy-time = { version = "0.4.0",  features = ["defmt", "defmt-timestamp-uptime"], optional = true }
-embassy-time-driver = { version = "0.2.0", optional = true }
+embassy-time-driver = { version = "0.2.0", features = ["tick-hz-1_000_000"], optional = true }
 embassy-time-queue-utils = { version = "0.1.0", optional = true }
 embassy-usb-logger = { version = "0.4.0", optional = true }
 cyw43 = { version = "0.3.0", features = ["defmt", "firmware-logs", "bluetooth"], optional = true }
@@ -58,6 +58,7 @@ wireless = [
   # "dep:rp-pac",
   # "dep:embassy-embedded-hal",
   "dep:embassy-executor",
+  "dep:embassy-futures",
   "dep:embassy-rp",
   "dep:embassy-sync",
   "dep:embassy-time",
@@ -66,7 +67,6 @@ wireless = [
   # "dep:embassy-usb",
   # "dep:embassy-net",
   # "dep:embassy-net-wiznet",
-  # "dep:embassy-futures",
   # "dep:embassy-usb-logger",
   "dep:cyw43",
   # "dep:cyw43-pio", # Causing interrupt symbol failures as it imports embassy-rp with the "rt" feature enabled
