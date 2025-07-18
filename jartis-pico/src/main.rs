@@ -14,7 +14,6 @@ use cortex_m::delay::Delay;
 use cortex_m_rt as _;
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::OutputPin;
 use panic_probe as _;
 use rp_pico as bsp;
 
@@ -97,8 +96,6 @@ fn main() -> ! {
         use static_cell::StaticCell;
         use wireless::wireless_main;
 
-        info!("wireless");
-
         // Create static executor
         static EXECUTOR: StaticCell<Executor> = StaticCell::new();
         let executor = EXECUTOR.init(Executor::new());
@@ -139,17 +136,12 @@ fn main() -> ! {
             &mut pac.RESETS,
         );
 
-        info!("init time driver");
         let timer = bsp::hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
-        unsafe {
-            wireless::embassy_timer_driver::init(timer);
-        };
-        info!("initialised time driver");
+        wireless::embassy_timer_driver::init(timer);
 
         executor.run(|spawner| {
             spawner.must_spawn(wireless_main(
-                spawner, pac.UART0, pac.RESETS, clocks, pins, pac.SPI0, pac.PIO0, pac.DMA, delay,
-                state,
+                spawner, pac.RESETS, clocks, pins, pac.SPI0, pac.PIO0, pac.DMA, delay, state,
             ));
         });
     }

@@ -25,6 +25,8 @@ const DUMMY_ALARM: AlarmState = AlarmState {
 };
 
 struct JartisDriver {
+    // Embassy has TIMER0 available as a global, but rp2040-hal makes it available as part of local
+    // peripherals
     timer: Mutex<CriticalSectionRawMutex, RefCell<Option<Timer>>>,
     alarm: Mutex<CriticalSectionRawMutex, AlarmState>,
     queue: Mutex<CriticalSectionRawMutex, RefCell<Queue>>,
@@ -38,23 +40,18 @@ embassy_time_driver::time_driver_impl!(static DRIVER: JartisDriver = JartisDrive
 
 impl JartisDriver {
     fn set_alarm(&self, cs: CriticalSection, at: u64) -> bool {
-        // Note that we're not checking the high bits at all. This means the irq may fire early
-        // if the alarm is more than 72 minutes (2^32 us) in the future. This is OK, since on irq fire
-        // it is checked if the alarm time has passed.
-        let instant = Instant::from_ticks(at as u32 as u64);
-        let alarm = &self.alarm.borrow(cs);
-        alarm.timestamp.set(instant);
-
-        // Arm it.
-        let timer = self.timer.borrow(cs);
-        let Some(mut timer) = *timer.borrow() else {
-            error!("no timer!");
-            return false;
-        };
+        let mut timer = self.timer.borrow(cs).borrow().unwrap();
         let Some(mut alarm0) = timer.alarm_0() else {
             error!("no alarm!");
             return false;
         };
+
+        // Note that we're not checking the high bits at all. This means the irq may fire early
+        // if the alarm is more than 72 minutes (2^32 us) in the future. This is OK, since on irq fire
+        // it is checked if the alarm time has passed.
+        let instant = Instant::from_ticks(at);
+        let alarm = &self.alarm.borrow(cs);
+        alarm.timestamp.set(instant);
 
         // Arm the alarm
         if let Err(_e) = alarm0.schedule_at(instant) {
@@ -62,39 +59,40 @@ impl JartisDriver {
         }
 
         let now = self.now();
-        info!("at: {}   now: {}", at, now);
         if at <= now {
             // If alarm timestamp has passed the alarm will not fire.
             // Disarm the alarm and return `false` to indicate that.
-            info!("alarm timestamp has passed");
-            alarm0.disable_interrupt();
+            trace!("alarm timestamp has passed");
             alarm.timestamp.set(Instant::from_ticks(FAKE_ALARM));
 
             return false;
         }
 
+        trace!(
+            "it worked :) at time {} with current time {}",
+            at,
+            self.now()
+        );
         true
     }
 
     fn check_alarm(&self) {
         // Which alarm we're seeing should be triggered
         critical_section::with(|cs| {
-            let Some(mut timer) = *self.timer.borrow(cs).borrow() else {
-                error!("timer is not set");
-                return;
-            };
+            let mut timer = self.timer.borrow(cs).borrow().unwrap();
             let Some(mut alarm0) = timer.alarm_0() else {
                 error!("alarm0 is not set");
                 return;
             };
+
             // clear the irq. If this isn't here, the interrupt handler repeatedly fires
             alarm0.clear_interrupt();
 
             let timestamp = self.alarm.borrow(cs).timestamp.get();
             let now = self.now();
 
-            info!("timestamp: {}   now: {}", timestamp.ticks(), now);
             if timestamp.ticks() <= now {
+                info!("alarm has elapsed, triggering...");
                 self.trigger_alarm(cs);
             } else {
                 // Not elapsed, arm it again.
@@ -102,6 +100,8 @@ impl JartisDriver {
                 if let Err(_e) = alarm0.schedule_at(timestamp) {
                     error!("check_alarm: Failed to arm alarm. Alarm too late");
                 }
+
+                alarm0.enable_interrupt();
             }
         });
     }
@@ -126,8 +126,8 @@ impl JartisDriver {
 impl Driver for JartisDriver {
     fn now(&self) -> u64 {
         critical_section::with(|cs| {
-            let timer = self.timer.borrow(cs);
-            let Some(timer) = *timer.borrow() else {
+            let timer = self.timer.borrow(cs).borrow();
+            let Some(timer) = timer.as_ref() else {
                 return 0;
             };
             timer.get_counter().ticks()
@@ -137,13 +137,17 @@ impl Driver for JartisDriver {
     fn schedule_wake(&self, at: u64, waker: &Waker) {
         critical_section::with(|cs| {
             let mut queue = self.queue.borrow(cs).borrow_mut();
-            info!("scheduling wake at {}        now: {}", at, self.now());
+            trace!("scheduling wake at {}        now: {}", at, self.now());
 
             if queue.schedule_wake(at, waker) {
+                waker.wake_by_ref();
                 let mut next = queue.next_expiration(self.now());
+                trace!("First next to {}   at time {}", next, self.now());
                 while !self.set_alarm(cs, next) {
                     next = queue.next_expiration(self.now());
+                    trace!("Re-assigned next to {}    at now time {}", next, self.now());
                 }
+                trace!("did schedule_wake at {} with now time {}", next, self.now());
             }
         });
     }
@@ -151,18 +155,20 @@ impl Driver for JartisDriver {
 
 /// # Safety
 /// must be called exactly once at bootup
-pub unsafe fn init(mut timer: Timer) {
+pub fn init(mut timer: Timer) {
     // init alarms
     critical_section::with(|cs| {
         // Let the interrupt driver be aware of the PAC's driver
         DRIVER.timer.borrow(cs).replace(Some(timer));
-        info!("timer replaced!");
 
         // Initialise the alarm states
         let alarm_state = DRIVER.alarm.borrow(cs);
         alarm_state.timestamp.set(Instant::from_ticks(FAKE_ALARM));
 
-        let mut alarm = timer.alarm_0().unwrap();
+        let Some(mut alarm) = timer.alarm_0() else {
+            error!("no alarm0!");
+            return;
+        };
 
         // Run the interrupt immediately
         let first_interrupt_schedule = Instant::from_ticks(0);
@@ -170,7 +176,7 @@ pub unsafe fn init(mut timer: Timer) {
             .schedule_at(first_interrupt_schedule)
             .expect("Could not schedule first interrupt");
         alarm.enable_interrupt();
-        info!("interrupt enabled!");
+        trace!("interrupt enabled!");
     });
 
     unsafe {

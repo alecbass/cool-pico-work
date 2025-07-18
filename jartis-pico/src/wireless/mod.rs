@@ -17,7 +17,6 @@ use rp_pico::hal;
 use rp_pico::hal::Clock;
 use rp_pico::hal::clocks::ClocksManager;
 use rp_pico::hal::dma::DMAExt;
-use rp_pico::hal::dma::SingleChannel;
 use rp_pico::hal::dma::Word;
 use rp_pico::hal::gpio;
 use rp_pico::hal::gpio::FunctionPio0;
@@ -28,7 +27,7 @@ use rp_pico::hal::pio::PIOExt;
 use rp_pico::hal::pio::SM0;
 use rp_pico::hal::spi::{self};
 use rp_pico::pac::DMA;
-use rp_pico::pac::{PIO0, RESETS, SPI0, UART0};
+use rp_pico::pac::{PIO0, RESETS, SPI0};
 
 use embassy_rp as _;
 
@@ -244,12 +243,15 @@ where
 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
+        info!("about to read");
         let status = self.read(write, read).await.unwrap_or(0);
+        info!("cmd_read status {}", status);
         self.cs.set_high().unwrap();
         status
     }
 
     async fn cmd_write(&mut self, write: &[u32]) -> u32 {
+        info!("cmd_write");
         self.cs.set_low().unwrap();
         let status = self.write(write).await.unwrap_or(0);
         self.cs.set_high().unwrap();
@@ -258,14 +260,19 @@ where
 
     async fn wait_for_event(&mut self) {
         // NOTE: Not sure how to mimic cyw43-pio's wait_for_event here
-        while self.dma.ch0.check_irq0() || self.spi.is_busy() {}
+        // while self.dma.ch0.check_irq0() || self.spi.is_busy() {}
+        // while self.dma.ch0.check_irq0() {
+        //     info!("waiting for event");
+        // }
+        while self.spi.is_busy() {
+            info!("waiting for event");
+        }
     }
 }
 
 #[embassy_executor::task]
 pub async fn wireless_main(
     spawner: Spawner,
-    uart_device: UART0,
     mut resets: RESETS,
     clocks: ClocksManager,
     pins: Pins,
@@ -275,25 +282,10 @@ pub async fn wireless_main(
     mut delay: Delay,
     state: &'static mut cyw43::State,
 ) {
-    // let uart_pins: UartPins<Gpio0, Gpio1> = (
-    //     // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
-    //     pins.gpio0.reconfigure::<FunctionUart, PullNone>(),
-    //     // UART RX (characters received by RP2040) on pin 2 (GPIO1)
-    //     pins.gpio1.reconfigure::<FunctionUart, PullNone>(),
-    // );
-    //
-    // let mut uart: Uart<Gpio0, Gpio1> = UartPeripheral::new(uart_device, uart_pins, &mut resets)
-    //     .enable(
-    //         UartConfig::new(9600_u32.Hz(), DataBits::Eight, None, StopBits::One),
-    //         clocks.peripheral_clock.freq(),
-    //     )
-    //     .unwrap();
-
     //
     // Configure pins fro PioSpi
     //
 
-    info!("Turning on LED");
     let mut led_pin = pins.gpio14.into_push_pull_output();
     led_pin.set_interrupt_enabled(gpio::Interrupt::EdgeLow, true); // Remove this
     led_pin.set_high().unwrap();
@@ -375,7 +367,6 @@ pub async fn wireless_main(
     let dma = dma.split(&mut resets);
 
     // Exchange the uninitialised SPI driver for an initialised one
-    info!("initialising SPI...");
     let spi = spi.init(
         &mut resets,
         clocks.peripheral_clock.freq(),
@@ -405,7 +396,9 @@ pub async fn wireless_main(
     let mut pwr = pins.b_power_save.into_push_pull_output();
     pwr.set_low().unwrap();
 
-    info!("initialising cyw43...");
+    embassy_futures::yield_now().await;
+    info!("yielded");
+
     let (_net_device, mut control, runner) =
         cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
     info!("initialised cyw43");
@@ -422,7 +415,6 @@ pub async fn wireless_main(
 
     loop {
         // delay.delay_ms(250);
-        cortex_m::asm::wfi();
         info!("led on!");
         control.gpio_set(0, true).await;
         delay.delay_ms(1000);
