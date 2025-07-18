@@ -12,6 +12,7 @@ use pio::InstructionOperands;
 use pio::OutDestination;
 use pio::SetDestination;
 use pio::pio_asm;
+use rp_pico::hal::spi::ValidatedPinTx;
 use rp_pico::Pins;
 use rp_pico::hal;
 use rp_pico::hal::Clock;
@@ -304,11 +305,6 @@ pub async fn wireless_main(
     led_pin.set_interrupt_enabled(gpio::Interrupt::EdgeLow, true); // Remove this
     led_pin.set_high().unwrap();
 
-    // Create PIO
-    // configure LED pin for Pio0.
-    let dio_pin: Pin<_, FunctionPio0, _> = pins.gpio18.into_function();
-    let dio_pin_id = dio_pin.id().num;
-
     // Define the CYW43 program, taken from cyw43-pio
     let default_program = pio_asm!(
         ".side_set 1"
@@ -357,6 +353,17 @@ pub async fn wireless_main(
         ".wrap"
     );
 
+    // From the Pico W datasheet:
+    // GPIO29 OP/IP wireless SPI CLK/ADC mode (ADC3) to measure VSYS/3
+    // GPIO25 OP wireless SPI CS - when high also enables GPIO29 ADC pin to read VSYS
+    // GPIO24 OP/IP wireless SPI data/IRQ
+    // GPIO23 OP wireless power on signal
+
+    // Create PIO
+    // configure LED pin for Pio0.
+    let dio_pin: Pin<_, FunctionPio0, _> = pins.gpio18.into_function();
+    let dio_pin_id = dio_pin.id().num;
+
     // Copied logic from cyw43-pio, but using rp2040-hal pins
     let mut pin_io: Pin<_, _, PullNone> = dio_pin.into_pull_type();
     pin_io.set_schmitt_enabled(true);
@@ -365,14 +372,17 @@ pub async fn wireless_main(
     pin_io.set_slew_rate(gpio::OutputSlewRate::Fast);
 
     // Set up our SPI pins into the correct mode
-    let mut spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio22.reconfigure();
+    let mut spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> =
+        pins.voltage_monitor.reconfigure(); // GPIO29
     spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
+    // let spi_sclk = spi_sclk.into_dyn_pin();
     let pin_clk_id = spi_sclk.id().num;
 
-    let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.gpio7.reconfigure(); // SPI0 TX
-    let spi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.gpio16.reconfigure(); // SPIO RX
-    let spi_cs = pins.gpio19.into_push_pull_output();
+    // let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.b_power_save.reconfigure(); // GPIO23 - SPI0 TX
+    let spi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.vbus_detect.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    // let spi_miso = spi_miso.into_dyn_pin();
+    let spi_cs = pins.led.into_push_pull_output(); // GPIO25
 
     // Initialize and start PIO
     let (mut pio, sm0, _, _, _) = pio0.split(&mut resets);
@@ -398,7 +408,7 @@ pub async fn wireless_main(
     ]);
 
     // Create the SPI driver instance for the SPI0 device
-    let spi = spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi, spi_miso, spi_sclk));
+    let spi = spi::Spi::<_, _, _, 8>::new(spi0, (spi_miso, spi_sclk));
 
     // Set up DMA
     let dma = dma.split(&mut resets);
@@ -430,7 +440,7 @@ pub async fn wireless_main(
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
 
-    let mut pwr = pins.b_power_save.into_push_pull_output();
+    let mut pwr = pins.b_power_save.into_push_pull_output(); // GPIO23
     pwr.set_low().unwrap();
 
     embassy_futures::yield_now().await;
