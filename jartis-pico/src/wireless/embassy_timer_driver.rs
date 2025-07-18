@@ -49,13 +49,13 @@ impl JartisDriver {
         // Note that we're not checking the high bits at all. This means the irq may fire early
         // if the alarm is more than 72 minutes (2^32 us) in the future. This is OK, since on irq fire
         // it is checked if the alarm time has passed.
-        let instant = Instant::from_ticks(at);
+        let instant = Instant::from_ticks(at as u32 as u64);
         let alarm = &self.alarm.borrow(cs);
         alarm.timestamp.set(instant);
 
         // Arm the alarm
         if let Err(_e) = alarm0.schedule_at(instant) {
-            error!("set_alarm: Failed to arm alarm at time {}", instant.ticks());
+            error!("set_alarm: Failed to arm alarm at time {}. Alarm too late", instant.ticks());
         }
 
         let now = self.now();
@@ -137,7 +137,7 @@ impl Driver for JartisDriver {
     fn schedule_wake(&self, at: u64, waker: &Waker) {
         critical_section::with(|cs| {
             let mut queue = self.queue.borrow(cs).borrow_mut();
-            trace!("scheduling wake at {}        now: {}", at, self.now());
+            info!("scheduling wake at {}        now: {}", at, self.now());
 
             if queue.schedule_wake(at, waker) {
                 let mut next = queue.next_expiration(self.now());

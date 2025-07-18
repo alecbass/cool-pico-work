@@ -1,32 +1,29 @@
 use core::cell::OnceCell;
+use core::convert::Infallible;
 
 use cortex_m::delay::Delay;
 use cyw43::SpiBusCyw43;
 use defmt::*;
 use embassy_executor::Spawner;
 use embedded_hal::digital::OutputPin;
-use fugit::RateExtU32;
 use panic_probe as _;
 use pio::Instruction;
 use pio::InstructionOperands;
 use pio::OutDestination;
 use pio::SetDestination;
 use pio::pio_asm;
-use rp_pico::hal::spi::ValidatedPinTx;
 use rp_pico::Pins;
 use rp_pico::hal;
-use rp_pico::hal::Clock;
 use rp_pico::hal::clocks::ClocksManager;
 use rp_pico::hal::dma::DMAExt;
 use rp_pico::hal::dma::Word;
 use rp_pico::hal::gpio;
 use rp_pico::hal::gpio::FunctionPio0;
+use rp_pico::hal::gpio::FunctionSpi;
 use rp_pico::hal::gpio::PullNone;
-use rp_pico::hal::gpio::bank0::Gpio23;
 use rp_pico::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
 use rp_pico::hal::pio::PIOExt;
 use rp_pico::hal::pio::SM0;
-use rp_pico::hal::spi::{self};
 use rp_pico::pac::DMA;
 use rp_pico::pac::{PIO0, RESETS, SPI0};
 
@@ -34,24 +31,24 @@ use embassy_rp as _;
 
 pub mod embassy_timer_driver;
 
-#[embassy_executor::task]
-async fn cyw43_task(
-    runner: cyw43::Runner<
-        'static,
-        Pin<Gpio23, FunctionSioOutput, PullDown>,
-        CustomSpiWrapper<
-            SPI0,
-            (
-                // Hardcoded pins as embassy_executor::task does not support generics, sadly
-                Pin<gpio::bank0::Gpio7, gpio::FunctionSpi, PullNone>,
-                Pin<gpio::bank0::Gpio16, gpio::FunctionSpi, PullUp>,
-                Pin<gpio::bank0::Gpio22, gpio::FunctionSpi, PullNone>,
-            ),
-        >,
-    >,
-) -> ! {
-    runner.run().await
-}
+// #[embassy_executor::task]
+// async fn cyw43_task(
+//     runner: cyw43::Runner<
+//         'static,
+//         Pin<Gpio23, FunctionSioOutput, PullDown>,
+//         CustomSpiWrapper<
+//             SPI0,
+//             (
+//                 // Hardcoded pins as embassy_executor::task does not support generics, sadly
+//                 Pin<gpio::bank0::Gpio7, gpio::FunctionSpi, PullNone>,
+//                 Pin<gpio::bank0::Gpio16, gpio::FunctionSpi, PullUp>,
+//                 Pin<gpio::bank0::Gpio22, gpio::FunctionSpi, PullNone>,
+//             ),
+//         >,
+//     >,
+// ) -> ! {
+//     runner.run().await
+// }
 
 /// Represents a state machine that can be either running or stopped
 enum SpiStateMachine {
@@ -61,20 +58,27 @@ enum SpiStateMachine {
 
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
-pub struct CustomSpiWrapper<D: spi::SpiDevice, P: spi::ValidSpiPinout<D>> {
-    spi: spi::Spi<spi::Enabled, D, P, 8>,
+pub struct CustomSpiWrapper<
+    // D: spi::SpiDevice,
+    // P: spi::ValidSpiPinout<D>,
+    CLK: OutputPin<Error = Infallible>,
+> {
+    // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
-    cs: Pin<gpio::bank0::Gpio19, FunctionSioOutput, PullDown>,
+    cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
+    dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
+    clk: CLK, // OnceCell<Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>>,
     rx: hal::pio::Rx<(PIO0, SM0), Word>,
     tx: hal::pio::Tx<(PIO0, SM0), Word>,
     wrap_target: u8,
     dma: hal::dma::Channels,
 }
 
-impl<D, P> CustomSpiWrapper<D, P>
+impl<CLK> CustomSpiWrapper<CLK>
 where
-    D: spi::SpiDevice,
-    P: spi::ValidSpiPinout<D>,
+    // D: spi::SpiDevice,
+    // P: spi::ValidSpiPinout<D>,
+    CLK: OutputPin<Error = Infallible>,
 {
     /// Set value of scratch register X.
     fn sm_set_x(&mut self, value: u32) {
@@ -149,6 +153,7 @@ where
     /// Write data to peripheral and return status.
     pub async fn write(&mut self, write: &[u32]) -> Result<u32, ()> {
         // NOTE: This is copied directly from cyw43-pio's PioSpi implementation
+        // Disable the state machine
         let sm = match self.sm.take() {
             Some(SpiStateMachine::Running(sm)) => sm.stop(),
             Some(SpiStateMachine::Stopped(sm)) => sm,
@@ -173,6 +178,7 @@ where
             self.sm_exec_jmp(self.wrap_target);
         }
 
+        // Enable the state machine
         let sm = match self.sm.take() {
             Some(SpiStateMachine::Running(sm)) => sm,
             Some(SpiStateMachine::Stopped(sm)) => sm.start(),
@@ -197,6 +203,7 @@ where
 
     /// Send command and read response into buffer.
     pub async fn read(&mut self, cmd: u32, read: &mut [u32]) -> Result<u32, ()> {
+        // Disable the state machine
         let sm = match self.sm.take() {
             Some(SpiStateMachine::Running(sm)) => sm.stop(),
             Some(SpiStateMachine::Stopped(sm)) => sm,
@@ -223,6 +230,7 @@ where
             self.sm_exec_jmp(self.wrap_target);
         }
 
+        // Enable the state machine
         let sm = match self.sm.take() {
             Some(SpiStateMachine::Running(sm)) => sm,
             Some(SpiStateMachine::Stopped(sm)) => sm.start(),
@@ -240,7 +248,7 @@ where
         // Read once
         let status = self.rx.read();
 
-        trace!(
+        info!(
             "cmd_read cmd = {:02x} len = {} read = {:08x}",
             cmd,
             read.len(),
@@ -249,13 +257,74 @@ where
 
         Ok(status.unwrap_or(0))
     }
+
+    // async fn read(&mut self, _write: u32, read: &mut [u32]) -> Result<u32, ()> {
+    //     trace!("spi read {}", read.len());
+    //     let mut dio = self.dio.take().unwrap().into_floating_input();
+    //
+    //     for word in read.iter_mut() {
+    //         let mut w = 0;
+    //         for _ in 0..32 {
+    //             w <<= 1;
+    //
+    //             cortex_m::asm::nop();
+    //             // rising edge, sample data
+    //             if dio.is_high().unwrap() {
+    //                 w |= 0x01;
+    //             }
+    //             self.clk.set_high().unwrap();
+    //
+    //             cortex_m::asm::nop();
+    //             // falling edge
+    //             self.clk.set_low().unwrap();
+    //         }
+    //         *word = w
+    //     }
+    //
+    //     self.dio.set(dio.reconfigure()).unwrap();
+    //     info!("spi read result: {:x}", read);
+    //     Ok(0)
+    // }
+    //
+    // async fn write(&mut self, words: &[u32]) -> Result<u32, ()> {
+    //     trace!("spi write {:x}", words);
+    //     let mut dio = self.dio.take().unwrap().into_push_pull_output();
+    //     // let mut clk = self.clk.take().unwrap().into_push_pull_output();
+    //
+    //     for word in words {
+    //         let mut word = *word;
+    //         for _ in 0..32 {
+    //             // falling edge, setup data
+    //             cortex_m::asm::nop();
+    //             self.clk.set_low().unwrap();
+    //             if word & 0x8000_0000 == 0 {
+    //                 dio.set_low().unwrap();
+    //             } else {
+    //                 dio.set_high().unwrap();
+    //             }
+    //
+    //             cortex_m::asm::nop();
+    //             // rising edge
+    //             self.clk.set_high().unwrap();
+    //
+    //             word <<= 1;
+    //         }
+    //     }
+    //     self.clk.set_low().unwrap();
+    //
+    //     self.dio
+    //         .set(dio.into_floating_input().reconfigure())
+    //         .unwrap();
+    //     Ok(0)
+    // }
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl<D, P> SpiBusCyw43 for CustomSpiWrapper<D, P>
+impl<CLK> SpiBusCyw43 for CustomSpiWrapper<CLK>
 where
-    D: spi::SpiDevice,
-    P: spi::ValidSpiPinout<D>,
+    // D: spi::SpiDevice,
+    // P: spi::ValidSpiPinout<D>,
+    CLK: OutputPin<Error = Infallible>,
 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
@@ -279,7 +348,10 @@ where
         // while self.dma.ch0.check_irq0() {
         //     info!("waiting for event");
         // }
-        while self.spi.is_busy() {
+        // while self.spi.is_busy() {
+        //     info!("waiting for event");
+        // }
+        loop {
             info!("waiting for event");
         }
     }
@@ -376,6 +448,7 @@ pub async fn wireless_main(
         pins.voltage_monitor.reconfigure(); // GPIO29
     spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
+    let spi_sclk = spi_sclk.into_push_pull_output();
     // let spi_sclk = spi_sclk.into_dyn_pin();
     let pin_clk_id = spi_sclk.id().num;
 
@@ -407,19 +480,8 @@ pub async fn wireless_main(
         (pin_clk_id, hal::pio::PinDir::Output),
     ]);
 
-    // Create the SPI driver instance for the SPI0 device
-    let spi = spi::Spi::<_, _, _, 8>::new(spi0, (spi_miso, spi_sclk));
-
     // Set up DMA
     let dma = dma.split(&mut resets);
-
-    // Exchange the uninitialised SPI driver for an initialised one
-    let spi = spi.init(
-        &mut resets,
-        clocks.peripheral_clock.freq(),
-        400.kHz(), // card initialization happens at low baud rate
-        embedded_hal::spi::MODE_0,
-    );
 
     let sm_cell = OnceCell::new();
     sm_cell
@@ -427,10 +489,15 @@ pub async fn wireless_main(
         .map_err(|_e| ())
         .unwrap();
 
+    let spi_mosi_miso_cell = OnceCell::new();
+    spi_mosi_miso_cell.set(spi_miso).unwrap();
+
     let spi_wrapper = CustomSpiWrapper {
-        spi,
+        // spi,
         sm: sm_cell,
         cs: spi_cs,
+        dio: spi_mosi_miso_cell,
+        clk: spi_sclk,
         rx,
         tx,
         wrap_target,
@@ -449,7 +516,7 @@ pub async fn wireless_main(
     let (_net_device, mut control, runner) =
         cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
     info!("initialised cyw43");
-    unwrap!(spawner.spawn(cyw43_task(runner)));
+    // unwrap!(spawner.spawn(cyw43_task(runner)));
     info!("spawned runner!!!!");
 
     control.init(clm).await;
