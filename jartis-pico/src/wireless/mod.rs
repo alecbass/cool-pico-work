@@ -17,6 +17,7 @@ use pio::pio_asm;
 use rp_pico_w::Pins;
 use rp_pico_w::hal;
 use rp_pico_w::hal::Clock;
+use rp_pico_w::hal::Spi;
 use rp_pico_w::hal::clocks::ClocksManager;
 use rp_pico_w::hal::dma::CH0;
 use rp_pico_w::hal::dma::CH1;
@@ -33,6 +34,7 @@ use rp_pico_w::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
 use rp_pico_w::hal::pio::Interrupt;
 use rp_pico_w::hal::pio::PIOExt;
 use rp_pico_w::hal::pio::SM0;
+use rp_pico_w::hal::spi::Enabled;
 use rp_pico_w::pac::DMA;
 use rp_pico_w::pac::{PIO0, RESETS, SPI0};
 
@@ -69,6 +71,7 @@ enum SpiStateMachine {
 /// This is only its own struct due to orphan implementation rules
 pub struct CustomSpiWrapper<
     'd,
+    'spi,
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
     CLK: OutputPin<Error = Infallible>,
@@ -79,16 +82,13 @@ pub struct CustomSpiWrapper<
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
     dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
     clk: CLK,
-    rx: hal::dma::bidirectional::Transfer<
-        Channel<CH1>,
-        &'d mut [u32; 32],
-        hal::pio::Rx<(PIO0, SM0)>,
-    >,
-    tx: Transfer<Channel<CH0>, &'d mut [u32; 32], hal::pio::Tx<(PIO0, SM0)>>,
     wrap_target: u8,
+    rx: hal::pio::Rx<(PIO0, SM0), Word>,
+    tx: hal::pio::Tx<(PIO0, SM0), Word>,
+    dma: hal::dma::Channels,
 }
 
-impl<'d, CLK> CustomSpiWrapper<'d, CLK>
+impl<'d, 'spi, CLK> CustomSpiWrapper<'d, 'spi, CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
@@ -104,6 +104,7 @@ where
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
         wrap_target: u8,
         dma: hal::dma::Channels,
+        // spi: Spi<Enabled>,
     ) -> Self {
         let sm_cell = OnceCell::new();
         sm_cell
@@ -114,32 +115,16 @@ where
         let dio_cell = OnceCell::new();
         dio_cell.set(dio).unwrap();
 
-        // Transfer a single message via DMA.
-        let tx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
-        let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
-        info!("creating transfers");
-        let tx_transfer: hal::dma::single_buffer::Transfer<
-            Channel<CH0>,
-            &mut [u32; 32],
-            hal::pio::Tx<(PIO0, SM0)>,
-        > = hal::dma::single_buffer::Config::new(dma.ch0, tx_buf, tx).start();
-        let rx_transfer = hal::dma::single_buffer::Config::new(dma.ch1, rx, rx_buf).start();
-        let transfer =
-            hal::dma::bidirectional::Config::new((dma.ch0, dma.ch1), tx_buf, spi, rx_buf).start();
-        info!("started transfers");
-        let (ch0, tx_buf, tx) = tx_transfer.wait();
-        let (ch1, rx, rx_buf) = rx_transfer.wait();
-        info!("waited for transfers");
-
         Self {
             sm: sm_cell,
             cs,
             irq,
             dio: dio_cell,
             clk,
-            rx: (ch1, rx, rx_buf),
-            tx: (ch0, tx, tx_buf),
             wrap_target,
+            tx,
+            rx,
+            dma,
         }
     }
     /// Set value of scratch register X.
@@ -260,13 +245,27 @@ where
         // Push to DMA
         info!("pushing this many to DMA: {}", write.len());
 
-        let (_, tx, _) = &mut self.tx;
-        for word in write {
-            tx.write(*word);
-        }
+        // Transfer a single message via DMA.
+        let tx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
+        let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
 
-        // Read from DMA
-        let (_, rx, _) = &mut self.rx;
+        info!("creating transfers");
+        let tx_config = hal::dma::single_buffer::Config::new(self.dma.ch0, tx_buf, self.tx);
+        let tx_transfer = tx_config.start();
+
+        let rx_config = hal::dma::single_buffer::Config::new(self.dma.ch1, self.rx, rx_buf);
+        let rx_transfer = rx_config.start();
+
+        // Write to and read from from DMA
+        info!("started transfers");
+        // Wait for both DMA channels to finish
+        let (ch0, tx_buf, tx) = tx_transfer.wait();
+        let (ch1, rx, rx_buf) = rx_transfer.wait();
+        info!("waited for transfers");
+
+        self.tx = tx;
+        self.rx = rx;
+
         match rx.read() {
             Some(result) => Ok(result),
             None => Err(()),
@@ -345,7 +344,7 @@ where
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl<'d, CLK> SpiBusCyw43 for CustomSpiWrapper<'d, CLK>
+impl<'d, 'spi, CLK> SpiBusCyw43 for CustomSpiWrapper<'d, 'spi, CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
