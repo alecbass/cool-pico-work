@@ -137,7 +137,6 @@ impl Driver for JartisDriver {
     fn schedule_wake(&self, at: u64, waker: &Waker) {
         critical_section::with(|cs| {
             let mut queue = self.queue.borrow(cs).borrow_mut();
-            info!("scheduling wake at {}        now: {}", at, self.now());
 
             if queue.schedule_wake(at, waker) {
                 let mut next = queue.next_expiration(self.now());
@@ -147,7 +146,7 @@ impl Driver for JartisDriver {
                     trace!("Re-assigned next to {}    at now time {}", next, self.now());
                 }
                 trace!("did schedule_wake at {} with now time {}", next, self.now());
-                waker.wake_by_ref();
+                waker.clone().wake_by_ref(); // TODO: Check that this is accurate
             }
         });
     }

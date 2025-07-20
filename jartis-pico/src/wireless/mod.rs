@@ -7,31 +7,34 @@ use cyw43::SpiBusCyw43;
 use defmt::*;
 use embassy_executor::Spawner;
 use embedded_hal::digital::OutputPin;
+use fugit::RateExtU32;
 use panic_probe as _;
 use pio::Instruction;
 use pio::InstructionOperands;
 use pio::OutDestination;
 use pio::SetDestination;
 use pio::pio_asm;
-use rp_pico::Pins;
-use rp_pico::hal;
-use rp_pico::hal::clocks::ClocksManager;
-use rp_pico::hal::dma::CH0;
-use rp_pico::hal::dma::CH1;
-use rp_pico::hal::dma::Channel;
-use rp_pico::hal::dma::DMAExt;
-use rp_pico::hal::dma::SingleChannel;
-use rp_pico::hal::dma::Word;
-use rp_pico::hal::gpio;
-use rp_pico::hal::gpio::FunctionPio0;
-use rp_pico::hal::gpio::FunctionSpi;
-use rp_pico::hal::gpio::PullNone;
-use rp_pico::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
-use rp_pico::hal::pio::Interrupt;
-use rp_pico::hal::pio::PIOExt;
-use rp_pico::hal::pio::SM0;
-use rp_pico::pac::DMA;
-use rp_pico::pac::{PIO0, RESETS, SPI0};
+use rp_pico_w::Pins;
+use rp_pico_w::hal;
+use rp_pico_w::hal::Clock;
+use rp_pico_w::hal::clocks::ClocksManager;
+use rp_pico_w::hal::dma::CH0;
+use rp_pico_w::hal::dma::CH1;
+use rp_pico_w::hal::dma::Channel;
+use rp_pico_w::hal::dma::DMAExt;
+use rp_pico_w::hal::dma::SingleChannel;
+use rp_pico_w::hal::dma::Word;
+use rp_pico_w::hal::dma::bidirectional::Transfer;
+use rp_pico_w::hal::gpio;
+use rp_pico_w::hal::gpio::FunctionPio0;
+use rp_pico_w::hal::gpio::FunctionSpi;
+use rp_pico_w::hal::gpio::PullNone;
+use rp_pico_w::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
+use rp_pico_w::hal::pio::Interrupt;
+use rp_pico_w::hal::pio::PIOExt;
+use rp_pico_w::hal::pio::SM0;
+use rp_pico_w::pac::DMA;
+use rp_pico_w::pac::{PIO0, RESETS, SPI0};
 
 use embassy_rp as _;
 
@@ -75,9 +78,13 @@ pub struct CustomSpiWrapper<
     irq: Interrupt<'d, PIO0, 0>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
     dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
-    clk: CLK, // OnceCell<Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>>,
-    rx: (Channel<CH1>, hal::pio::Rx<(PIO0, SM0), Word>, &'d [u32; 32]),
-    tx: (Channel<CH0>, hal::pio::Tx<(PIO0, SM0), Word>, &'d [u32; 32]),
+    clk: CLK,
+    rx: hal::dma::bidirectional::Transfer<
+        Channel<CH1>,
+        &'d mut [u32; 32],
+        hal::pio::Rx<(PIO0, SM0)>,
+    >,
+    tx: Transfer<Channel<CH0>, &'d mut [u32; 32], hal::pio::Tx<(PIO0, SM0)>>,
     wrap_target: u8,
 }
 
@@ -111,8 +118,14 @@ where
         let tx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
         let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
         info!("creating transfers");
-        let tx_transfer = hal::dma::single_buffer::Config::new(dma.ch0, tx_buf, tx).start();
+        let tx_transfer: hal::dma::single_buffer::Transfer<
+            Channel<CH0>,
+            &mut [u32; 32],
+            hal::pio::Tx<(PIO0, SM0)>,
+        > = hal::dma::single_buffer::Config::new(dma.ch0, tx_buf, tx).start();
         let rx_transfer = hal::dma::single_buffer::Config::new(dma.ch1, rx, rx_buf).start();
+        let transfer =
+            hal::dma::bidirectional::Config::new((dma.ch0, dma.ch1), tx_buf, spi, rx_buf).start();
         info!("started transfers");
         let (ch0, tx_buf, tx) = tx_transfer.wait();
         let (ch1, rx, rx_buf) = rx_transfer.wait();
@@ -431,18 +444,17 @@ pub async fn wireless_main(
 
     // Set up our SPI pins into the correct mode
     let mut spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> =
-        pins.voltage_monitor.reconfigure(); // GPIO29
+        pins.voltage_monitor_wl_clk.reconfigure(); // GPIO29
     spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
-    let spi_sclk = spi_sclk.into_push_pull_output();
-    // let spi_sclk = spi_sclk.into_dyn_pin();
+    let spi_sclk: Pin<_, gpio::FunctionSpi, _> = spi_sclk.into_push_pull_output().reconfigure();
     let pin_clk_id = spi_sclk.id().num;
 
     // let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.b_power_save.reconfigure(); // GPIO23 - SPI0 TX
-    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> =
-        pins.vbus_detect.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.wl_d.reconfigure(); // GPIO24 (wl_d) - SPIO RX
     // let spi_miso = spi_miso.into_dyn_pin();
-    let spi_cs = pins.led.into_push_pull_output(); // GPIO25
+    let spi_cs: Pin<_, gpio::FunctionSpi, gpio::PullNone> =
+        pins.wl_cs.into_push_pull_output().reconfigure(); // GPIO25
 
     // Initialize and start PIO
     let (mut pio, sm0, _, _, _) = pio0.split(&mut resets);
@@ -467,6 +479,16 @@ pub async fn wireless_main(
         (pin_clk_id, hal::pio::PinDir::Output),
     ]);
 
+    let spi = hal::spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi_miso, spi_sclk));
+
+    // Exchange the uninitialised SPI driver for an initialised one
+    let spi = spi.init(
+        &mut resets,
+        clocks.peripheral_clock.freq(),
+        16_000_000u32.Hz(),
+        embedded_hal::spi::MODE_0,
+    );
+
     // Set up DMA
     let dma = dma.split(&mut resets);
     let irq = pio.irq0();
@@ -487,7 +509,7 @@ pub async fn wireless_main(
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
 
-    let mut pwr = pins.b_power_save.into_push_pull_output(); // GPIO23
+    let mut pwr = pins.wl_on.into_push_pull_output(); // GPIO23
     pwr.set_low().unwrap();
 
     embassy_futures::yield_now().await;

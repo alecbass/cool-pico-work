@@ -1163,7 +1163,7 @@ dependencies = [
  "jartis",
  "panic-probe",
  "pio",
- "rp-pico",
+ "rp-pico-w",
  "static_cell",
 ]
 
@@ -1634,6 +1634,17 @@ dependencies = [
 
 [[package]]
 name = "rp-pico"
+version = "0.9.0"
+dependencies = [
+ "cortex-m-rt",
+ "fugit",
+ "rp2040-boot2",
+ "rp2040-hal",
+ "usb-device",
+]
+
+[[package]]
+name = "rp-pico-w"
 version = "0.9.0"
 dependencies = [
  "cortex-m-rt",
