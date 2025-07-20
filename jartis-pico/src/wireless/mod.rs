@@ -2,6 +2,7 @@ use core::cell::OnceCell;
 use core::convert::Infallible;
 
 use cortex_m::delay::Delay;
+use cortex_m::singleton;
 use cyw43::SpiBusCyw43;
 use defmt::*;
 use embassy_executor::Spawner;
@@ -15,13 +16,18 @@ use pio::pio_asm;
 use rp_pico::Pins;
 use rp_pico::hal;
 use rp_pico::hal::clocks::ClocksManager;
+use rp_pico::hal::dma::CH0;
+use rp_pico::hal::dma::CH1;
+use rp_pico::hal::dma::Channel;
 use rp_pico::hal::dma::DMAExt;
+use rp_pico::hal::dma::SingleChannel;
 use rp_pico::hal::dma::Word;
 use rp_pico::hal::gpio;
 use rp_pico::hal::gpio::FunctionPio0;
 use rp_pico::hal::gpio::FunctionSpi;
 use rp_pico::hal::gpio::PullNone;
 use rp_pico::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
+use rp_pico::hal::pio::Interrupt;
 use rp_pico::hal::pio::PIOExt;
 use rp_pico::hal::pio::SM0;
 use rp_pico::pac::DMA;
@@ -59,27 +65,70 @@ enum SpiStateMachine {
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
 pub struct CustomSpiWrapper<
+    'd,
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
     CLK: OutputPin<Error = Infallible>,
 > {
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
+    irq: Interrupt<'d, PIO0, 0>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
     dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
     clk: CLK, // OnceCell<Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>>,
-    rx: hal::pio::Rx<(PIO0, SM0), Word>,
-    tx: hal::pio::Tx<(PIO0, SM0), Word>,
+    rx: (Channel<CH1>, hal::pio::Rx<(PIO0, SM0), Word>, &'d [u32; 32]),
+    tx: (Channel<CH0>, hal::pio::Tx<(PIO0, SM0), Word>, &'d [u32; 32]),
     wrap_target: u8,
-    dma: hal::dma::Channels,
 }
 
-impl<CLK> CustomSpiWrapper<CLK>
+impl<'d, CLK> CustomSpiWrapper<'d, CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
     CLK: OutputPin<Error = Infallible>,
 {
+    fn new(
+        sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
+        irq: Interrupt<'d, PIO0, 0>,
+        cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
+        dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>,
+        clk: CLK, // OnceCell<Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>>,
+        rx: hal::pio::Rx<(PIO0, SM0), Word>,
+        tx: hal::pio::Tx<(PIO0, SM0), Word>,
+        wrap_target: u8,
+        dma: hal::dma::Channels,
+    ) -> Self {
+        let sm_cell = OnceCell::new();
+        sm_cell
+            .set(SpiStateMachine::Running(sm.start()))
+            .map_err(|_e| ())
+            .unwrap();
+
+        let dio_cell = OnceCell::new();
+        dio_cell.set(dio).unwrap();
+
+        // Transfer a single message via DMA.
+        let tx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
+        let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
+        info!("creating transfers");
+        let tx_transfer = hal::dma::single_buffer::Config::new(dma.ch0, tx_buf, tx).start();
+        let rx_transfer = hal::dma::single_buffer::Config::new(dma.ch1, rx, rx_buf).start();
+        info!("started transfers");
+        let (ch0, tx_buf, tx) = tx_transfer.wait();
+        let (ch1, rx, rx_buf) = rx_transfer.wait();
+        info!("waited for transfers");
+
+        Self {
+            sm: sm_cell,
+            cs,
+            irq,
+            dio: dio_cell,
+            clk,
+            rx: (ch1, rx, rx_buf),
+            tx: (ch0, tx, tx_buf),
+            wrap_target,
+        }
+    }
     /// Set value of scratch register X.
     fn sm_set_x(&mut self, value: u32) {
         const OUT: InstructionOperands = InstructionOperands::OUT {
@@ -89,11 +138,14 @@ where
         const INSTRUCTION: Instruction = Instruction {
             operands: OUT,
             delay: 0,
-            side_set: None,
+            side_set: Some(1),
         };
 
         if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            self.tx.write(value);
+            let (_, tx, _) = &mut self.tx;
+            if !tx.write(value) {
+                error!("sm_set_x: could not write to tx");
+            }
             sm.exec_instruction(INSTRUCTION);
         }
     }
@@ -107,11 +159,14 @@ where
         const INSTRUCTION: Instruction = Instruction {
             operands: OUT,
             delay: 0,
-            side_set: None,
+            side_set: Some(1), // Don't know why this needs to be Some but it is required
         };
 
         if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            self.tx.write(value);
+            let (_, tx, _) = &mut self.tx;
+            if !tx.write(value) {
+                error!("sm_set_y: could not write to tx");
+            }
             sm.exec_instruction(INSTRUCTION);
         }
     }
@@ -125,7 +180,7 @@ where
         let instruction = Instruction {
             operands: set,
             delay: 0,
-            side_set: None,
+            side_set: Some(1),
         };
 
         if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
@@ -142,7 +197,7 @@ where
         let instruction = Instruction {
             operands: jmp,
             delay: 0,
-            side_set: None,
+            side_set: Some(1),
         };
 
         if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
@@ -189,13 +244,17 @@ where
             .map_err(|_e| ())
             .unwrap();
 
-        //. Push to DMA
+        // Push to DMA
+        info!("pushing this many to DMA: {}", write.len());
+
+        let (_, tx, _) = &mut self.tx;
         for word in write {
-            self.tx.write(*word);
+            tx.write(*word);
         }
 
         // Read from DMA
-        match self.rx.read() {
+        let (_, rx, _) = &mut self.rx;
+        match rx.read() {
             Some(result) => Ok(result),
             None => Err(()),
         }
@@ -210,18 +269,20 @@ where
             _ => return Err(()),
         };
 
-        info!("trying to do thing");
-        self.sm
+        if self
+            .sm
             .set(SpiStateMachine::Stopped(sm))
             .map_err(|_e| ())
-            .unwrap();
-        info!("stopped sm");
+            .is_err()
+        {
+            error!("failed to save stopped sm");
+        }
 
         let write_bits = 31;
         let read_bits = read.len() * 32 + 32 - 1;
 
-        info!("cmd_read write={} read={}", write_bits, read_bits);
-        info!("cmd_read cmd = {:02x} len = {}", cmd, read.len());
+        trace!("cmd_read write={} read={}", write_bits, read_bits);
+        trace!("cmd_read cmd = {:02x} len = {}", cmd, read.len());
 
         unsafe {
             self.sm_set_y(read_bits as u32);
@@ -238,89 +299,40 @@ where
         };
 
         self.sm.set(SpiStateMachine::Running(sm)).map_err(|_e| ())?;
-        self.tx.write(cmd);
+        let (_, tx, _) = &mut self.tx;
+        if !tx.write(cmd) {
+            error!("read: could not write to tx");
+        }
+        let (_, rx, _) = &mut self.rx;
 
-        for _ in 0..read.len() {
-            // Read as many bytes as requested
-            self.rx.read().unwrap();
+        for i in 0..read.len() {
+            if let Some(number) = rx.read() {
+                read[i] = number;
+            } else {
+                break;
+            }
         }
 
-        // Read once
-        let status = self.rx.read();
+        // Read status
+        let status = rx.read();
 
         info!(
-            "cmd_read cmd = {:02x} len = {} read = {:08x}",
+            "cmd_read cmd = {:02x} len = {} read = {:08x} status = {}",
             cmd,
             read.len(),
-            read
+            read,
+            status
         );
 
-        Ok(status.unwrap_or(0))
+        match status {
+            Some(status) => Ok(status),
+            None => Err(()),
+        }
     }
-
-    // async fn read(&mut self, _write: u32, read: &mut [u32]) -> Result<u32, ()> {
-    //     trace!("spi read {}", read.len());
-    //     let mut dio = self.dio.take().unwrap().into_floating_input();
-    //
-    //     for word in read.iter_mut() {
-    //         let mut w = 0;
-    //         for _ in 0..32 {
-    //             w <<= 1;
-    //
-    //             cortex_m::asm::nop();
-    //             // rising edge, sample data
-    //             if dio.is_high().unwrap() {
-    //                 w |= 0x01;
-    //             }
-    //             self.clk.set_high().unwrap();
-    //
-    //             cortex_m::asm::nop();
-    //             // falling edge
-    //             self.clk.set_low().unwrap();
-    //         }
-    //         *word = w
-    //     }
-    //
-    //     self.dio.set(dio.reconfigure()).unwrap();
-    //     info!("spi read result: {:x}", read);
-    //     Ok(0)
-    // }
-    //
-    // async fn write(&mut self, words: &[u32]) -> Result<u32, ()> {
-    //     trace!("spi write {:x}", words);
-    //     let mut dio = self.dio.take().unwrap().into_push_pull_output();
-    //     // let mut clk = self.clk.take().unwrap().into_push_pull_output();
-    //
-    //     for word in words {
-    //         let mut word = *word;
-    //         for _ in 0..32 {
-    //             // falling edge, setup data
-    //             cortex_m::asm::nop();
-    //             self.clk.set_low().unwrap();
-    //             if word & 0x8000_0000 == 0 {
-    //                 dio.set_low().unwrap();
-    //             } else {
-    //                 dio.set_high().unwrap();
-    //             }
-    //
-    //             cortex_m::asm::nop();
-    //             // rising edge
-    //             self.clk.set_high().unwrap();
-    //
-    //             word <<= 1;
-    //         }
-    //     }
-    //     self.clk.set_low().unwrap();
-    //
-    //     self.dio
-    //         .set(dio.into_floating_input().reconfigure())
-    //         .unwrap();
-    //     Ok(0)
-    // }
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl<CLK> SpiBusCyw43 for CustomSpiWrapper<CLK>
+impl<'d, CLK> SpiBusCyw43 for CustomSpiWrapper<'d, CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
@@ -329,13 +341,11 @@ where
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
         let status = self.read(write, read).await.unwrap_or(0);
-        info!("cmd_read status {}", status);
         self.cs.set_high().unwrap();
         status
     }
 
     async fn cmd_write(&mut self, write: &[u32]) -> u32 {
-        info!("cmd_write");
         self.cs.set_low().unwrap();
         let status = self.write(write).await.unwrap_or(0);
         self.cs.set_high().unwrap();
@@ -401,30 +411,6 @@ pub async fn wireless_main(
         ".wrap"
     );
 
-    let overclock_program = pio_asm!(
-        ".side_set 1"
-
-        ".wrap_target"
-        // write out x-1 bits
-        "lp:"
-        "out pins, 1    side 0"
-        "jmp x-- lp     side 1"
-        // switch directions
-        "set pindirs, 0 side 0"
-        "nop            side 1"  // necessary for clkdiv=1.
-        "nop            side 0"
-        // read in y-1 bits
-        "lp2:"
-        "in pins, 1     side 1"
-        "jmp y-- lp2    side 0"
-
-        // wait for event and irq host
-        "wait 1 pin 0   side 0"
-        "irq 0          side 0"
-
-        ".wrap"
-    );
-
     // From the Pico W datasheet:
     // GPIO29 OP/IP wireless SPI CLK/ADC mode (ADC3) to measure VSYS/3
     // GPIO25 OP wireless SPI CS - when high also enables GPIO29 ADC pin to read VSYS
@@ -453,7 +439,8 @@ pub async fn wireless_main(
     let pin_clk_id = spi_sclk.id().num;
 
     // let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.b_power_save.reconfigure(); // GPIO23 - SPI0 TX
-    let spi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.vbus_detect.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> =
+        pins.vbus_detect.reconfigure(); // GPIO24 (wl_d) - SPIO RX
     // let spi_miso = spi_miso.into_dyn_pin();
     let spi_cs = pins.led.into_push_pull_output(); // GPIO25
 
@@ -482,27 +469,20 @@ pub async fn wireless_main(
 
     // Set up DMA
     let dma = dma.split(&mut resets);
+    let irq = pio.irq0();
 
-    let sm_cell = OnceCell::new();
-    sm_cell
-        .set(SpiStateMachine::Running(sm.start()))
-        .map_err(|_e| ())
-        .unwrap();
-
-    let spi_mosi_miso_cell = OnceCell::new();
-    spi_mosi_miso_cell.set(spi_miso).unwrap();
-
-    let spi_wrapper = CustomSpiWrapper {
-        // spi,
-        sm: sm_cell,
-        cs: spi_cs,
-        dio: spi_mosi_miso_cell,
-        clk: spi_sclk,
+    info!("creating SPI wrapper");
+    let spi_wrapper = CustomSpiWrapper::new(
+        sm,
+        irq,
+        spi_cs,
+        spi_mosi_miso,
+        spi_sclk,
         rx,
         tx,
         wrap_target,
         dma,
-    };
+    );
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
@@ -525,7 +505,6 @@ pub async fn wireless_main(
         .await;
 
     info!("set power!!!!");
-    // let delay = Duration::from_secs(1);
 
     loop {
         // delay.delay_ms(250);
