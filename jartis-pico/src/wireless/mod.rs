@@ -65,16 +65,18 @@ enum SpiStateMachine {
 
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
-pub struct CustomSpiWrapper<
-    // D: spi::SpiDevice,
-    // P: spi::ValidSpiPinout<D>,
-    CLK: OutputPin<Error = Infallible>,
-> {
+pub struct CustomSpiWrapper
+// <
+// D: spi::SpiDevice,
+// P: spi::ValidSpiPinout<D>,
+// CLK: OutputPin<Error = Infallible>,
+// >
+{
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
     dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
-    clk: CLK,
+    clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>,
     wrap_target: u8,
     tx: OnceCell<hal::pio::Tx<(PIO0, SM0), Word>>,
     tx_buf: &'static mut [u32; 1],
@@ -84,18 +86,18 @@ pub struct CustomSpiWrapper<
     dma_ch1: OnceCell<Channel<CH1>>,
 }
 
-impl<CLK> CustomSpiWrapper<CLK>
-where
-    // D: spi::SpiDevice,
-    // P: spi::ValidSpiPinout<D>,
-    CLK: OutputPin<Error = Infallible>,
+impl CustomSpiWrapper
+// where
+// D: spi::SpiDevice,
+// P: spi::ValidSpiPinout<D>,
+// CLK: OutputPin<Error = Infallible>,
 {
     fn new(
         sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
         irq: Interrupt<PIO0, 0>,
         cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
         dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>,
-        clk: CLK, // OnceCell<Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>>,
+        clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>,
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
         tx_buf: &'static mut [u32; 1],
         rx: hal::pio::Rx<(PIO0, SM0), Word>,
@@ -360,6 +362,8 @@ where
         let tx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.tx_buf) };
         let rx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.rx_buf) };
 
+        rx_buf[0] = 12;
+
         // Use the command
         tx_buf[0] = cmd;
 
@@ -405,11 +409,11 @@ where
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl<CLK> SpiBusCyw43 for CustomSpiWrapper<CLK>
-where
-    // D: spi::SpiDevice,
-    // P: spi::ValidSpiPinout<D>,
-    CLK: OutputPin<Error = Infallible>,
+impl SpiBusCyw43 for CustomSpiWrapper
+// where
+// D: spi::SpiDevice,
+// P: spi::ValidSpiPinout<D>,
+// CLK: OutputPin<Error = Infallible>,
 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
@@ -492,27 +496,24 @@ pub async fn wireless_main(
     // GPIO24 OP/IP wireless SPI data/IRQ
     // GPIO23 OP wireless power on signal
 
-    // Create PIO
-    // configure LED pin for Pio0.
-    let dio_pin: Pin<_, FunctionPio0, _> = pins.gpio18.into_function();
-    let dio_pin_id = dio_pin.id().num;
-
     // Copied logic from cyw43-pio, but using rp2040-hal pins
-    let mut pin_io: Pin<_, _, PullNone> = dio_pin.into_pull_type();
-    pin_io.set_schmitt_enabled(true);
-    // dio_pin.set_input_sync_bypass(true); TODO: Find equivalent, if necessary
-    pin_io.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps);
-    pin_io.set_slew_rate(gpio::OutputSlewRate::Fast);
 
     // Set up our SPI pins into the correct mode
-    let mut spi_sclk: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> =
-        pins.voltage_monitor_wl_clk.reconfigure(); // GPIO29
+    let mut spi_sclk: Pin<_, gpio::FunctionSioOutput, _> =
+        pins.voltage_monitor_wl_clk.into_push_pull_output();
+    spi_sclk.set_low().unwrap(); // This pin needs to start in a low power state
+    let mut spi_sclk: Pin<_, gpio::FunctionSpi, gpio::PullNone> = spi_sclk.reconfigure(); // GPIO29
     spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
-    let spi_sclk: Pin<_, gpio::FunctionSioOutput, _> = spi_sclk.into_push_pull_output();
     let pin_clk_id = spi_sclk.id().num;
 
-    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.wl_d.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    // This pin needs to start in a low power state
+    let mut spi_mosi_miso = pins.wl_d.into_push_pull_output();
+    spi_mosi_miso.set_low().unwrap();
+    spi_mosi_miso.set_sync_bypass(true);
+    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = spi_mosi_miso.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    let spi_mosi_miso_id = spi_mosi_miso.id().num;
+
     let mut spi_cs: Pin<_, gpio::FunctionSioOutput, gpio::PullDown> =
         pins.wl_cs.into_push_pull_output().reconfigure(); // GPIO25
     spi_cs.set_high().unwrap(); // This needs to be high for the CYW43 driver to work
@@ -524,9 +525,9 @@ pub async fn wireless_main(
     let (int, frac) = (0, 0); // as slow as possible (0 is interpreted as 65536)
     // Match cwy43-pio's pins, shift and clock divider configuration
     let (mut sm, rx, tx) = hal::pio::PIOBuilder::from_installed_program(installed)
-        .out_pins(dio_pin_id, 1)
-        .in_pin_base(dio_pin_id)
-        .set_pins(dio_pin_id, 1)
+        .out_pins(spi_mosi_miso_id, 1)
+        .in_pin_base(spi_mosi_miso_id)
+        .set_pins(spi_mosi_miso_id, 1)
         .out_shift_direction(hal::pio::ShiftDirection::Left)
         .in_shift_direction(hal::pio::ShiftDirection::Right)
         .autopush(true) // Matching embassy's shift_in.auto_fill = true
@@ -536,7 +537,7 @@ pub async fn wireless_main(
 
     // The GPIO pins need to be configured as outputs
     sm.set_pindirs([
-        (dio_pin_id, hal::pio::PinDir::Output),
+        (spi_mosi_miso_id, hal::pio::PinDir::Output),
         (pin_clk_id, hal::pio::PinDir::Output),
     ]);
 
