@@ -1,7 +1,4 @@
-use core::cell::Cell;
 use core::cell::OnceCell;
-use core::cell::RefCell;
-use core::convert::Infallible;
 
 use cortex_m::delay::Delay;
 use cortex_m::singleton;
@@ -25,9 +22,7 @@ use rp_pico_w::hal::dma::Channel;
 use rp_pico_w::hal::dma::DMAExt;
 use rp_pico_w::hal::dma::Word;
 use rp_pico_w::hal::gpio;
-use rp_pico_w::hal::gpio::FunctionPio0;
 use rp_pico_w::hal::gpio::FunctionSpi;
-use rp_pico_w::hal::gpio::PullNone;
 use rp_pico_w::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
 use rp_pico_w::hal::pio::Interrupt;
 use rp_pico_w::hal::pio::PIOExt;
@@ -64,25 +59,22 @@ enum SpiStateMachine {
     Stopped(hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>),
 }
 
+// Got these from the C SDK read_reg_u32_swap function
+const TX_LENGTH: usize = 4;
+const RX_LENGTH: usize = 8; // Might need to increase this for the backpane queries
+
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
-pub struct CustomSpiWrapper
-// <
-// D: spi::SpiDevice,
-// P: spi::ValidSpiPinout<D>,
-// CLK: OutputPin<Error = Infallible>,
-// >
-{
+pub struct CustomSpiWrapper {
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
-    dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullDown>>,
     clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullDown>,
     wrap_target: u8,
     tx: OnceCell<hal::pio::Tx<(PIO0, SM0), Word>>,
-    tx_buf: &'static mut [u32; 1],
+    tx_buf: &'static mut [u32; TX_LENGTH],
     rx: OnceCell<hal::pio::Rx<(PIO0, SM0), Word>>,
-    rx_buf: &'static mut [u32; 1],
+    rx_buf: &'static mut [u32; RX_LENGTH],
     dma_ch0: OnceCell<Channel<CH0>>,
     dma_ch1: OnceCell<Channel<CH1>>,
 }
@@ -100,9 +92,9 @@ impl CustomSpiWrapper
         dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullDown>,
         clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullDown>,
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
-        tx_buf: &'static mut [u32; 1],
+        tx_buf: &'static mut [u32; TX_LENGTH],
         rx: hal::pio::Rx<(PIO0, SM0), Word>,
-        rx_buf: &'static mut [u32; 1],
+        rx_buf: &'static mut [u32; RX_LENGTH],
         wrap_target: u8,
         dma: hal::dma::Channels,
         // spi: Spi<Enabled>,
@@ -112,9 +104,6 @@ impl CustomSpiWrapper
             .set(SpiStateMachine::Running(sm.start()))
             .map_err(|_e| ())
             .unwrap();
-
-        let dio_cell = OnceCell::new();
-        dio_cell.set(dio).unwrap();
 
         let rx_cell = OnceCell::new();
         rx_cell.set(rx).map_err(|_e| ()).unwrap();
@@ -128,10 +117,12 @@ impl CustomSpiWrapper
         let dma_ch1_cell = OnceCell::new();
         dma_ch1_cell.set(dma.ch1).map_err(|_e| ()).unwrap();
 
+        // Setup IRQ (24) - also used for DO, DI
+        dio.into_pull_down_input();
+
         Self {
             sm: sm_cell,
             cs,
-            dio: dio_cell,
             clk,
             wrap_target,
             tx: tx_cell,
@@ -496,6 +487,25 @@ pub async fn wireless_main(
         ".wrap"
     );
 
+    // .program spi_gap0_sample1
+    let c_program = pio_asm!(
+        ".side_set 1"
+
+        ".wrap_target"
+        // always transmit multiple of 32 bytes
+        "lp:",
+        "out pins, 1             side 0"
+        "jmp x-- lp              side 1"
+        "public lp1_end:"
+        "set pindirs, 0          side 0"
+        "lp2:"
+        "in pins, 1              side 1"
+        "jmp y-- lp2             side 0"
+        "public end:"
+
+        ".wrap"
+    );
+
     // From the Pico W datasheet:
     // GPIO29 OP/IP wireless SPI CLK/ADC mode (ADC3) to measure VSYS/3
     // GPIO25 OP wireless SPI CS - when high also enables GPIO29 ADC pin to read VSYS
@@ -504,7 +514,8 @@ pub async fn wireless_main(
 
     // Copied logic from cyw43-pio, but using rp2040-hal pins
 
-    // Set up our SPI pins into the correct mode
+    // Set up our SPI pins into the correct mode. Look at cyw43_spi_gpio_setup in the C SDK for
+    // reference
     let mut spi_sclk: Pin<_, gpio::FunctionSioOutput, _> =
         pins.voltage_monitor_wl_clk.into_push_pull_output();
     spi_sclk.set_low().unwrap(); // This pin needs to start in a low power state
@@ -522,13 +533,14 @@ pub async fn wireless_main(
     spi_mosi_miso.set_schmitt_enabled(true);
     let spi_mosi_miso_id = spi_mosi_miso.id().num;
 
+    // SPI CS (Chip select)
     let mut spi_cs: Pin<_, gpio::FunctionSioOutput, gpio::PullDown> =
         pins.wl_cs.into_push_pull_output().reconfigure(); // GPIO25
-    spi_cs.set_high().unwrap(); // This needs to be high for the CYW43 driver to work
+    spi_cs.set_low().unwrap(); // This needs to be high for the CYW43 driver to work
 
     // Initialize and start PIO
     let (mut pio, sm0, _, _, _) = pio0.split(&mut resets);
-    let installed = pio.install(&default_program.program).unwrap();
+    let installed = pio.install(&c_program.program).unwrap();
     let wrap_target = installed.wrap_target();
 
     // Taken from the Pico C SDK in the CYW43 PIO SPI bus
@@ -573,8 +585,8 @@ pub async fn wireless_main(
     let dma = dma.split(&mut resets);
     let irq = pio.irq0();
 
-    let tx_buf = singleton!(: [u32; 1] = [0; 1]).unwrap();
-    let rx_buf = singleton!(: [u32; 1] = [0; 1]).unwrap();
+    let tx_buf = singleton!(: [u32; TX_LENGTH] = [0; TX_LENGTH]).unwrap();
+    let rx_buf = singleton!(: [u32; RX_LENGTH] = [0; RX_LENGTH]).unwrap();
 
     info!("creating SPI wrapper");
     let spi_wrapper = CustomSpiWrapper::new(
@@ -593,7 +605,7 @@ pub async fn wireless_main(
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
-    let mut pwr = pins.wl_on.into_push_pull_output(); // GPIO23 
+    let mut pwr: Pin<_, _, PullUp> = pins.wl_on.into_push_pull_output().reconfigure(); // GPIO23 
 
     // NOTE: This needs to start as high, as the CYW43 bus turns out low and then high
     if pwr.set_high().is_err() {
