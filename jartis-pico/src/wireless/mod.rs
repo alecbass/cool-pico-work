@@ -15,6 +15,7 @@ use pio::InstructionOperands;
 use pio::OutDestination;
 use pio::SetDestination;
 use pio::pio_asm;
+use rp_pico::hal::pio::PinState;
 use rp_pico_w::Pins;
 use rp_pico_w::hal;
 use rp_pico_w::hal::clocks::ClocksManager;
@@ -75,8 +76,8 @@ pub struct CustomSpiWrapper
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
-    dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
-    clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>,
+    dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullDown>>,
+    clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullDown>,
     wrap_target: u8,
     tx: OnceCell<hal::pio::Tx<(PIO0, SM0), Word>>,
     tx_buf: &'static mut [u32; 1],
@@ -96,8 +97,8 @@ impl CustomSpiWrapper
         sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
         irq: Interrupt<PIO0, 0>,
         cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
-        dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>,
-        clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>,
+        dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullDown>,
+        clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullDown>,
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
         tx_buf: &'static mut [u32; 1],
         rx: hal::pio::Rx<(PIO0, SM0), Word>,
@@ -232,15 +233,15 @@ impl CustomSpiWrapper
             .map_err(|_e| ())
             .unwrap();
 
-        let write_bits = write.len() * 32 - 1;
-        let read_bits = 31;
+        let write_bits: u32 = (write.len() as u32) * 32 - 1;
+        let read_bits: u32 = 31;
 
         info!("write={} read={}", write_bits, read_bits);
 
         let mut tx = self.tx.take().unwrap();
         unsafe {
-            self.sm_set_x(write_bits as u32, &mut tx);
-            self.sm_set_y(read_bits as u32, &mut tx);
+            self.sm_set_x(write_bits, &mut tx);
+            self.sm_set_y(read_bits, &mut tx);
             self.sm_set_pin_dir(0b1);
             self.sm_exec_jmp(self.wrap_target);
         }
@@ -507,16 +508,18 @@ pub async fn wireless_main(
     let mut spi_sclk: Pin<_, gpio::FunctionSioOutput, _> =
         pins.voltage_monitor_wl_clk.into_push_pull_output();
     spi_sclk.set_low().unwrap(); // This pin needs to start in a low power state
-    let mut spi_sclk: Pin<_, gpio::FunctionSpi, gpio::PullNone> = spi_sclk.reconfigure(); // GPIO29
+    let mut spi_sclk: Pin<_, gpio::FunctionSpi, gpio::PullDown> = spi_sclk.reconfigure(); // GPIO29
     spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
-    let pin_clk_id = spi_sclk.id().num;
+    let spi_sclk_id = spi_sclk.id().num;
 
     // This pin needs to start in a low power state
     let mut spi_mosi_miso = pins.wl_d.into_push_pull_output();
     spi_mosi_miso.set_low().unwrap();
     spi_mosi_miso.set_sync_bypass(true);
-    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = spi_mosi_miso.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullDown> =
+        spi_mosi_miso.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    spi_mosi_miso.set_schmitt_enabled(true);
     let spi_mosi_miso_id = spi_mosi_miso.id().num;
 
     let mut spi_cs: Pin<_, gpio::FunctionSioOutput, gpio::PullDown> =
@@ -527,11 +530,17 @@ pub async fn wireless_main(
     let (mut pio, sm0, _, _, _) = pio0.split(&mut resets);
     let installed = pio.install(&default_program.program).unwrap();
     let wrap_target = installed.wrap_target();
-    let (int, frac) = (0, 0); // as slow as possible (0 is interpreted as 65536)
+
+    // Taken from the Pico C SDK in the CYW43 PIO SPI bus
+    const CYW43_PIO_CLOCK_DIV_INT: u16 = 2;
+    const CYW43_PIO_CLOCK_DIV_FRAC: u8 = 0; // as slow as possible (0 is interpreted as 65536). Taken from the
+    let (int, frac) = (CYW43_PIO_CLOCK_DIV_INT, CYW43_PIO_CLOCK_DIV_FRAC);
+
     // Match cwy43-pio's pins, shift and clock divider configuration
     let (mut sm, rx, tx) = hal::pio::PIOBuilder::from_installed_program(installed)
         .out_pins(spi_mosi_miso_id, 1)
         .in_pin_base(spi_mosi_miso_id)
+        .side_set_pin_base(1) // TODO: Review if needed
         .set_pins(spi_mosi_miso_id, 1)
         .out_shift_direction(hal::pio::ShiftDirection::Left)
         .in_shift_direction(hal::pio::ShiftDirection::Right)
@@ -543,7 +552,11 @@ pub async fn wireless_main(
     // The GPIO pins need to be configured as outputs
     sm.set_pindirs([
         (spi_mosi_miso_id, hal::pio::PinDir::Output),
-        (pin_clk_id, hal::pio::PinDir::Output),
+        (spi_sclk_id, hal::pio::PinDir::Output),
+    ]);
+    sm.set_pins([
+        (spi_mosi_miso_id, PinState::Low),
+        (spi_sclk_id, PinState::Low),
     ]);
 
     // let spi = hal::spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi_miso, spi_sclk));
