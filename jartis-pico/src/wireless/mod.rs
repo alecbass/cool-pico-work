@@ -398,6 +398,11 @@ impl CustomSpiWrapper
             status
         );
 
+        if let Ok(ref s) = status {
+            // Print status as hexadecimal;
+            info!("hex status = {:#x}", s);
+        }
+
         // Re-assign the cells so we can own their values later
         self.dma_ch0.set(ch0).map_err(|_e| ()).unwrap();
         self.dma_ch1.set(ch1).map_err(|_e| ()).unwrap();
