@@ -1163,6 +1163,7 @@ dependencies = [
  "jartis",
  "panic-probe",
  "pio",
+ "rp-pico",
  "rp-pico-w",
  "static_cell",
 ]

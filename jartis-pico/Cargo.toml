@@ -14,6 +14,7 @@ embedded-hal = { workspace = true }
 embedded-hal-nb = { workspace = true }
 
 # Shared with jartis so we can use pins and such
+rp-pico = { workspace = true }
 rp-pico-w = { workspace = true }
 
 jartis = { path = "../jartis" }

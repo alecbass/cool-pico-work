@@ -30,7 +30,7 @@ fn main() -> ! {
 
     #[cfg(not(feature = "wireless"))]
     {
-        #[link(name = "jartis", kind = "static")]
+        // #[link(name = "jartis", kind = "static")]
         // unsafe extern "C" {
         //     fn connectToWifi() -> core::ffi::c_int;
         //     fn cyw43_arch_init() -> core::ffi::c_int;
@@ -93,6 +93,7 @@ fn main() -> ! {
     #[cfg(feature = "wireless")]
     {
         use embassy_executor::Executor;
+        use rp_pico_w::Pins;
         use static_cell::StaticCell;
         use wireless::wireless_main;
 

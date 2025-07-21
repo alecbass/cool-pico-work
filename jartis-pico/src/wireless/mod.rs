@@ -1,3 +1,4 @@
+use core::cell::Cell;
 use core::cell::OnceCell;
 use core::convert::Infallible;
 
@@ -71,7 +72,6 @@ enum SpiStateMachine {
 /// This is only its own struct due to orphan implementation rules
 pub struct CustomSpiWrapper<
     'd,
-    'spi,
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
     CLK: OutputPin<Error = Infallible>,
@@ -83,12 +83,13 @@ pub struct CustomSpiWrapper<
     dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
     clk: CLK,
     wrap_target: u8,
-    rx: hal::pio::Rx<(PIO0, SM0), Word>,
-    tx: hal::pio::Tx<(PIO0, SM0), Word>,
-    dma: hal::dma::Channels,
+    rx: OnceCell<hal::pio::Rx<(PIO0, SM0), Word>>,
+    tx: OnceCell<hal::pio::Tx<(PIO0, SM0), Word>>,
+    dma_ch0: OnceCell<Channel<CH0>>,
+    dma_ch1: OnceCell<Channel<CH1>>,
 }
 
-impl<'d, 'spi, CLK> CustomSpiWrapper<'d, 'spi, CLK>
+impl<'d, CLK> CustomSpiWrapper<'d, CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
@@ -115,6 +116,18 @@ where
         let dio_cell = OnceCell::new();
         dio_cell.set(dio).unwrap();
 
+        let rx_cell = OnceCell::new();
+        rx_cell.set(rx).map_err(|_e| ()).unwrap();
+
+        let tx_cell = OnceCell::new();
+        tx_cell.set(tx).map_err(|_e| ()).unwrap();
+
+        let dma_ch0_cell = OnceCell::new();
+        dma_ch0_cell.set(dma.ch0).map_err(|_e| ()).unwrap();
+
+        let dma_ch1_cell = OnceCell::new();
+        dma_ch1_cell.set(dma.ch1).map_err(|_e| ()).unwrap();
+
         Self {
             sm: sm_cell,
             cs,
@@ -122,13 +135,14 @@ where
             dio: dio_cell,
             clk,
             wrap_target,
-            tx,
-            rx,
-            dma,
+            tx: tx_cell,
+            rx: rx_cell,
+            dma_ch0: dma_ch0_cell,
+            dma_ch1: dma_ch1_cell,
         }
     }
     /// Set value of scratch register X.
-    fn sm_set_x(&mut self, value: u32) {
+    fn sm_set_x(&mut self, value: u32, tx: &mut hal::pio::Tx<(PIO0, SM0), Word>) {
         const OUT: InstructionOperands = InstructionOperands::OUT {
             destination: OutDestination::X,
             bit_count: 32,
@@ -140,7 +154,6 @@ where
         };
 
         if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            let (_, tx, _) = &mut self.tx;
             if !tx.write(value) {
                 error!("sm_set_x: could not write to tx");
             }
@@ -149,7 +162,7 @@ where
     }
 
     /// Set value of scratch register Y.
-    fn sm_set_y(&mut self, value: u32) {
+    fn sm_set_y(&mut self, value: u32, tx: &mut hal::pio::Tx<(PIO0, SM0), Word>) {
         const OUT: InstructionOperands = InstructionOperands::OUT {
             destination: OutDestination::Y,
             bit_count: 32,
@@ -161,7 +174,6 @@ where
         };
 
         if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            let (_, tx, _) = &mut self.tx;
             if !tx.write(value) {
                 error!("sm_set_y: could not write to tx");
             }
@@ -224,9 +236,10 @@ where
 
         info!("write={} read={}", write_bits, read_bits);
 
+        let mut tx = self.tx.take().unwrap();
         unsafe {
-            self.sm_set_x(write_bits as u32);
-            self.sm_set_y(read_bits as u32);
+            self.sm_set_x(write_bits as u32, &mut tx);
+            self.sm_set_y(read_bits as u32, &mut tx);
             self.sm_set_pin_dir(0b1);
             self.sm_exec_jmp(self.wrap_target);
         }
@@ -249,27 +262,41 @@ where
         let tx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
         let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
 
+        // Meme method for getting a value that lives long enough for the DMA configuration
+        let write_len = write.len();
+        for i in 0..write_len {
+            tx_buf[i] = write[i];
+        }
+
         info!("creating transfers");
-        let tx_config = hal::dma::single_buffer::Config::new(self.dma.ch0, tx_buf, self.tx);
+        let ch0 = self.dma_ch0.take().unwrap();
+        let ch1 = self.dma_ch1.take().unwrap();
+        let rx = self.rx.take().unwrap();
+        let tx_config = hal::dma::single_buffer::Config::new(ch0, &tx_buf[0..write_len], tx);
         let tx_transfer = tx_config.start();
 
-        let rx_config = hal::dma::single_buffer::Config::new(self.dma.ch1, self.rx, rx_buf);
+        let rx_config = hal::dma::single_buffer::Config::new(ch1, rx, rx_buf);
         let rx_transfer = rx_config.start();
 
         // Write to and read from from DMA
         info!("started transfers");
         // Wait for both DMA channels to finish
-        let (ch0, tx_buf, tx) = tx_transfer.wait();
-        let (ch1, rx, rx_buf) = rx_transfer.wait();
+        let (ch0, _tx_buf, tx) = tx_transfer.wait();
+        let (ch1, mut rx, _rx_buf) = rx_transfer.wait();
         info!("waited for transfers");
 
-        self.tx = tx;
-        self.rx = rx;
-
-        match rx.read() {
+        let status = match rx.read() {
             Some(result) => Ok(result),
             None => Err(()),
-        }
+        };
+
+        // Re-assign the cells so we can own their values later
+        self.dma_ch0.set(ch0).map_err(|_e| ()).unwrap();
+        self.dma_ch1.set(ch1).map_err(|_e| ()).unwrap();
+        self.tx.set(tx).map_err(|_e| ()).unwrap();
+        self.rx.set(rx).map_err(|_e| ()).unwrap();
+
+        status
     }
 
     /// Send command and read response into buffer.
@@ -296,9 +323,10 @@ where
         trace!("cmd_read write={} read={}", write_bits, read_bits);
         trace!("cmd_read cmd = {:02x} len = {}", cmd, read.len());
 
+        let mut tx = self.tx.take().unwrap();
         unsafe {
-            self.sm_set_y(read_bits as u32);
-            self.sm_set_x(write_bits as u32);
+            self.sm_set_y(read_bits as u32, &mut tx);
+            self.sm_set_x(write_bits as u32, &mut tx);
             self.sm_set_pin_dir(0b1);
             self.sm_exec_jmp(self.wrap_target);
         }
@@ -311,22 +339,35 @@ where
         };
 
         self.sm.set(SpiStateMachine::Running(sm)).map_err(|_e| ())?;
-        let (_, tx, _) = &mut self.tx;
-        if !tx.write(cmd) {
-            error!("read: could not write to tx");
-        }
-        let (_, rx, _) = &mut self.rx;
 
-        for i in 0..read.len() {
-            if let Some(number) = rx.read() {
-                read[i] = number;
-            } else {
-                break;
-            }
+        // Transfer a single message via DMA.
+        let tx_buf = singleton!(: [u32; 1] = [cmd]).unwrap();
+        let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
+
+        // Meme method for getting a value that lives long enough for the DMA configuration
+        let read_len = read.len();
+        for i in 0..read_len {
+            rx_buf[i] = read[i];
         }
+
+        info!("creating transfers");
+        let ch0 = self.dma_ch0.take().unwrap();
+        let ch1 = self.dma_ch1.take().unwrap();
+        let rx = self.rx.take().unwrap();
+        let tx_config = hal::dma::single_buffer::Config::new(ch0, tx_buf, tx);
+        let tx_transfer = tx_config.start();
+
+        let rx_config = hal::dma::single_buffer::Config::new(ch1, rx, rx_buf);
+        let rx_transfer = rx_config.start();
+
+        let (ch0, _tx_buf, tx) = tx_transfer.wait();
+        let (ch1, mut rx, _rx_buf) = rx_transfer.wait();
 
         // Read status
-        let status = rx.read();
+        let status = match rx.read() {
+            Some(result) => Ok(result),
+            None => Err(()),
+        };
 
         info!(
             "cmd_read cmd = {:02x} len = {} read = {:08x} status = {}",
@@ -336,15 +377,18 @@ where
             status
         );
 
-        match status {
-            Some(status) => Ok(status),
-            None => Err(()),
-        }
+        // Re-assign the cells so we can own their values later
+        self.dma_ch0.set(ch0).map_err(|_e| ()).unwrap();
+        self.dma_ch1.set(ch1).map_err(|_e| ()).unwrap();
+        self.tx.set(tx).map_err(|_e| ()).unwrap();
+        self.rx.set(rx).map_err(|_e| ()).unwrap();
+
+        status
     }
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl<'d, 'spi, CLK> SpiBusCyw43 for CustomSpiWrapper<'d, 'spi, CLK>
+impl<'d, CLK> SpiBusCyw43 for CustomSpiWrapper<'d, CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
@@ -446,13 +490,11 @@ pub async fn wireless_main(
         pins.voltage_monitor_wl_clk.reconfigure(); // GPIO29
     spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
-    let spi_sclk: Pin<_, gpio::FunctionSpi, _> = spi_sclk.into_push_pull_output().reconfigure();
+    let spi_sclk: Pin<_, gpio::FunctionSioOutput, _> = spi_sclk.into_push_pull_output();
     let pin_clk_id = spi_sclk.id().num;
 
-    // let spi_mosi: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> = pins.b_power_save.reconfigure(); // GPIO23 - SPI0 TX
     let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.wl_d.reconfigure(); // GPIO24 (wl_d) - SPIO RX
-    // let spi_miso = spi_miso.into_dyn_pin();
-    let spi_cs: Pin<_, gpio::FunctionSpi, gpio::PullNone> =
+    let spi_cs: Pin<_, gpio::FunctionSioOutput, gpio::PullDown> =
         pins.wl_cs.into_push_pull_output().reconfigure(); // GPIO25
 
     // Initialize and start PIO
@@ -478,15 +520,15 @@ pub async fn wireless_main(
         (pin_clk_id, hal::pio::PinDir::Output),
     ]);
 
-    let spi = hal::spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi_miso, spi_sclk));
-
-    // Exchange the uninitialised SPI driver for an initialised one
-    let spi = spi.init(
-        &mut resets,
-        clocks.peripheral_clock.freq(),
-        16_000_000u32.Hz(),
-        embedded_hal::spi::MODE_0,
-    );
+    // let spi = hal::spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi_miso, spi_sclk));
+    //
+    // // Exchange the uninitialised SPI driver for an initialised one
+    // let spi = spi.init(
+    //     &mut resets,
+    //     clocks.peripheral_clock.freq(),
+    //     16_000_000u32.Hz(),
+    //     embedded_hal::spi::MODE_0,
+    // );
 
     // Set up DMA
     let dma = dma.split(&mut resets);
