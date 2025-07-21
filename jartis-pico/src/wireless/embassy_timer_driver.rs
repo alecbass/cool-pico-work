@@ -4,7 +4,7 @@ use core::{
 };
 
 use critical_section::CriticalSection;
-use defmt::{error, info, trace};
+use defmt::{error, info, trace, warn};
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time_driver::Driver;
 use embassy_time_queue_utils::Queue;
@@ -55,7 +55,10 @@ impl JartisDriver {
 
         // Arm the alarm
         if let Err(_e) = alarm0.schedule_at(instant) {
-            error!("set_alarm: Failed to arm alarm at time {}. Alarm too late", instant.ticks());
+            error!(
+                "set_alarm: Failed to arm alarm at time {}. Alarm too late",
+                instant.ticks()
+            );
         }
 
         let now = self.now();
@@ -140,14 +143,16 @@ impl Driver for JartisDriver {
 
             if queue.schedule_wake(at, waker) {
                 let mut next = queue.next_expiration(self.now());
-                trace!("First next to {}   at time {}", next, self.now());
                 while !self.set_alarm(cs, next) {
                     next = queue.next_expiration(self.now());
                     trace!("Re-assigned next to {}    at now time {}", next, self.now());
                 }
                 trace!("did schedule_wake at {} with now time {}", next, self.now());
-                waker.clone().wake_by_ref(); // TODO: Check that this is accurate
+            } else {
+                warn!("nothing to wake at {}", at);
             }
+
+            waker.wake_by_ref(); // TODO: Check that this is accurate
         });
     }
 }

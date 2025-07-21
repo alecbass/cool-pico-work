@@ -1,5 +1,6 @@
 use core::cell::Cell;
 use core::cell::OnceCell;
+use core::cell::RefCell;
 use core::convert::Infallible;
 
 use cortex_m::delay::Delay;
@@ -8,7 +9,6 @@ use cyw43::SpiBusCyw43;
 use defmt::*;
 use embassy_executor::Spawner;
 use embedded_hal::digital::OutputPin;
-use fugit::RateExtU32;
 use panic_probe as _;
 use pio::Instruction;
 use pio::InstructionOperands;
@@ -17,16 +17,12 @@ use pio::SetDestination;
 use pio::pio_asm;
 use rp_pico_w::Pins;
 use rp_pico_w::hal;
-use rp_pico_w::hal::Clock;
-use rp_pico_w::hal::Spi;
 use rp_pico_w::hal::clocks::ClocksManager;
 use rp_pico_w::hal::dma::CH0;
 use rp_pico_w::hal::dma::CH1;
 use rp_pico_w::hal::dma::Channel;
 use rp_pico_w::hal::dma::DMAExt;
-use rp_pico_w::hal::dma::SingleChannel;
 use rp_pico_w::hal::dma::Word;
-use rp_pico_w::hal::dma::bidirectional::Transfer;
 use rp_pico_w::hal::gpio;
 use rp_pico_w::hal::gpio::FunctionPio0;
 use rp_pico_w::hal::gpio::FunctionSpi;
@@ -35,7 +31,6 @@ use rp_pico_w::hal::gpio::{FunctionSioOutput, Pin, PullDown, PullUp};
 use rp_pico_w::hal::pio::Interrupt;
 use rp_pico_w::hal::pio::PIOExt;
 use rp_pico_w::hal::pio::SM0;
-use rp_pico_w::hal::spi::Enabled;
 use rp_pico_w::pac::DMA;
 use rp_pico_w::pac::{PIO0, RESETS, SPI0};
 
@@ -71,25 +66,25 @@ enum SpiStateMachine {
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
 pub struct CustomSpiWrapper<
-    'd,
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
     CLK: OutputPin<Error = Infallible>,
 > {
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
-    irq: Interrupt<'d, PIO0, 0>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
     dio: OnceCell<Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>>,
     clk: CLK,
     wrap_target: u8,
-    rx: OnceCell<hal::pio::Rx<(PIO0, SM0), Word>>,
     tx: OnceCell<hal::pio::Tx<(PIO0, SM0), Word>>,
+    tx_buf: &'static mut [u32; 1],
+    rx: OnceCell<hal::pio::Rx<(PIO0, SM0), Word>>,
+    rx_buf: &'static mut [u32; 1],
     dma_ch0: OnceCell<Channel<CH0>>,
     dma_ch1: OnceCell<Channel<CH1>>,
 }
 
-impl<'d, CLK> CustomSpiWrapper<'d, CLK>
+impl<CLK> CustomSpiWrapper<CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
@@ -97,12 +92,14 @@ where
 {
     fn new(
         sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
-        irq: Interrupt<'d, PIO0, 0>,
+        irq: Interrupt<PIO0, 0>,
         cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
         dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullUp>,
         clk: CLK, // OnceCell<Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>>,
-        rx: hal::pio::Rx<(PIO0, SM0), Word>,
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
+        tx_buf: &'static mut [u32; 1],
+        rx: hal::pio::Rx<(PIO0, SM0), Word>,
+        rx_buf: &'static mut [u32; 1],
         wrap_target: u8,
         dma: hal::dma::Channels,
         // spi: Spi<Enabled>,
@@ -131,16 +128,18 @@ where
         Self {
             sm: sm_cell,
             cs,
-            irq,
             dio: dio_cell,
             clk,
             wrap_target,
             tx: tx_cell,
+            tx_buf,
             rx: rx_cell,
+            rx_buf,
             dma_ch0: dma_ch0_cell,
             dma_ch1: dma_ch1_cell,
         }
     }
+
     /// Set value of scratch register X.
     fn sm_set_x(&mut self, value: u32, tx: &mut hal::pio::Tx<(PIO0, SM0), Word>) {
         const OUT: InstructionOperands = InstructionOperands::OUT {
@@ -259,10 +258,10 @@ where
         info!("pushing this many to DMA: {}", write.len());
 
         // Transfer a single message via DMA.
-        let tx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
-        let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
-
         // Meme method for getting a value that lives long enough for the DMA configuration
+        let tx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.tx_buf) };
+        let rx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.rx_buf) };
+
         let write_len = write.len();
         for i in 0..write_len {
             tx_buf[i] = write[i];
@@ -272,7 +271,8 @@ where
         let ch0 = self.dma_ch0.take().unwrap();
         let ch1 = self.dma_ch1.take().unwrap();
         let rx = self.rx.take().unwrap();
-        let tx_config = hal::dma::single_buffer::Config::new(ch0, &tx_buf[0..write_len], tx);
+
+        let tx_config = hal::dma::single_buffer::Config::new(ch0, tx_buf, tx);
         let tx_transfer = tx_config.start();
 
         let rx_config = hal::dma::single_buffer::Config::new(ch1, rx, rx_buf);
@@ -282,13 +282,24 @@ where
         info!("started transfers");
         // Wait for both DMA channels to finish
         let (ch0, _tx_buf, tx) = tx_transfer.wait();
-        let (ch1, mut rx, _rx_buf) = rx_transfer.wait();
+        let (ch1, rx, rx_buf) = rx_transfer.wait();
         info!("waited for transfers");
 
-        let status = match rx.read() {
-            Some(result) => Ok(result),
+        let status = match rx_buf.get(0) {
+            Some(status) => Ok(status.clone()),
             None => Err(()),
         };
+        // let status = match rx_buf.get(0) {
+        //     Some(result) => Ok(*result),
+        //     None => Err(()),
+        // };
+
+        info!(
+            "write  len = {} read = {:08x} status = {}",
+            rx_buf.len(),
+            rx_buf,
+            status
+        );
 
         // Re-assign the cells so we can own their values later
         self.dma_ch0.set(ch0).map_err(|_e| ()).unwrap();
@@ -320,10 +331,14 @@ where
         let write_bits = 31;
         let read_bits = read.len() * 32 + 32 - 1;
 
-        trace!("cmd_read write={} read={}", write_bits, read_bits);
-        trace!("cmd_read cmd = {:02x} len = {}", cmd, read.len());
+        info!("cmd_read write={} read={}", write_bits, read_bits);
+        info!("cmd_read cmd = {}({:02x}) len = {}", cmd, cmd, read.len());
 
-        let mut tx = self.tx.take().unwrap();
+        let Some(mut tx) = self.tx.take() else {
+            error!("failed to take tx");
+            return Err(());
+        };
+
         unsafe {
             self.sm_set_y(read_bits as u32, &mut tx);
             self.sm_set_x(write_bits as u32, &mut tx);
@@ -341,16 +356,13 @@ where
         self.sm.set(SpiStateMachine::Running(sm)).map_err(|_e| ())?;
 
         // Transfer a single message via DMA.
-        let tx_buf = singleton!(: [u32; 1] = [cmd]).unwrap();
-        let rx_buf = singleton!(: [u32; 32] = [0; 32]).unwrap();
-
         // Meme method for getting a value that lives long enough for the DMA configuration
-        let read_len = read.len();
-        for i in 0..read_len {
-            rx_buf[i] = read[i];
-        }
+        let tx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.tx_buf) };
+        let rx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.rx_buf) };
 
-        info!("creating transfers");
+        // Use the command
+        tx_buf[0] = cmd;
+
         let ch0 = self.dma_ch0.take().unwrap();
         let ch1 = self.dma_ch1.take().unwrap();
         let rx = self.rx.take().unwrap();
@@ -360,12 +372,17 @@ where
         let rx_config = hal::dma::single_buffer::Config::new(ch1, rx, rx_buf);
         let rx_transfer = rx_config.start();
 
+        info!("waiting...");
         let (ch0, _tx_buf, tx) = tx_transfer.wait();
-        let (ch1, mut rx, _rx_buf) = rx_transfer.wait();
+        let (ch1, rx, rx_buf) = rx_transfer.wait();
 
         // Read status
-        let status = match rx.read() {
-            Some(result) => Ok(result),
+        // let status = match rx.read() {
+        //     Some(result) => Ok(result),
+        //     None => Err(()),
+        // };
+        let status = match rx_buf.get(0) {
+            Some(result) => Ok(*result),
             None => Err(()),
         };
 
@@ -388,7 +405,7 @@ where
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl<'d, CLK> SpiBusCyw43 for CustomSpiWrapper<'d, CLK>
+impl<CLK> SpiBusCyw43 for CustomSpiWrapper<CLK>
 where
     // D: spi::SpiDevice,
     // P: spi::ValidSpiPinout<D>,
@@ -396,14 +413,16 @@ where
 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
-        let status = self.read(write, read).await.unwrap_or(0);
+        info!("cmd_read {} {}", write, read);
+        let status = self.read(write, read).await.unwrap_or(1);
         self.cs.set_high().unwrap();
         status
     }
 
     async fn cmd_write(&mut self, write: &[u32]) -> u32 {
         self.cs.set_low().unwrap();
-        let status = self.write(write).await.unwrap_or(0);
+        info!("writing {}", write);
+        let status = self.write(write).await.unwrap_or(1);
         self.cs.set_high().unwrap();
         status
     }
@@ -441,7 +460,7 @@ pub async fn wireless_main(
 
     let mut led_pin = pins.gpio14.into_push_pull_output();
     led_pin.set_interrupt_enabled(gpio::Interrupt::EdgeLow, true); // Remove this
-    led_pin.set_high().unwrap();
+    led_pin.set_low().unwrap();
 
     // Define the CYW43 program, taken from cyw43-pio
     let default_program = pio_asm!(
@@ -494,8 +513,9 @@ pub async fn wireless_main(
     let pin_clk_id = spi_sclk.id().num;
 
     let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullUp> = pins.wl_d.reconfigure(); // GPIO24 (wl_d) - SPIO RX
-    let spi_cs: Pin<_, gpio::FunctionSioOutput, gpio::PullDown> =
+    let mut spi_cs: Pin<_, gpio::FunctionSioOutput, gpio::PullDown> =
         pins.wl_cs.into_push_pull_output().reconfigure(); // GPIO25
+    spi_cs.set_high().unwrap(); // This needs to be high for the CYW43 driver to work
 
     // Initialize and start PIO
     let (mut pio, sm0, _, _, _) = pio0.split(&mut resets);
@@ -534,6 +554,9 @@ pub async fn wireless_main(
     let dma = dma.split(&mut resets);
     let irq = pio.irq0();
 
+    let tx_buf = singleton!(: [u32; 1] = [0; 1]).unwrap();
+    let rx_buf = singleton!(: [u32; 1] = [0; 1]).unwrap();
+
     info!("creating SPI wrapper");
     let spi_wrapper = CustomSpiWrapper::new(
         sm,
@@ -541,22 +564,27 @@ pub async fn wireless_main(
         spi_cs,
         spi_mosi_miso,
         spi_sclk,
-        rx,
         tx,
+        tx_buf,
+        rx,
+        rx_buf,
         wrap_target,
         dma,
     );
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
+    let mut pwr = pins.wl_on.into_push_pull_output(); // GPIO23 
 
-    let mut pwr = pins.wl_on.into_push_pull_output(); // GPIO23
-    pwr.set_low().unwrap();
+    // NOTE: This needs to start as high, as the CYW43 bus turns out low and then high
+    if pwr.set_high().is_err() {
+        warn!("Wireless power pin could not be set to high. It likely already was set to high");
+    }
 
     embassy_futures::yield_now().await;
     info!("yielded");
 
-    let (_net_device, mut control, runner) =
+    let (_net_device, mut control, _runner) =
         cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
     info!("initialised cyw43");
     // unwrap!(spawner.spawn(cyw43_task(runner)));
