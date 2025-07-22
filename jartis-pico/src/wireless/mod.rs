@@ -12,7 +12,12 @@ use pio::InstructionOperands;
 use pio::OutDestination;
 use pio::SetDestination;
 use pio::pio_asm;
+use rp_pico::hal::gpio::PullNone;
 use rp_pico::hal::pio::PinState;
+use rp_pico::hal::pio::Running;
+use rp_pico::hal::pio::StateMachine;
+use rp_pico::hal::pio::Stopped;
+use rp_pico::hal::spi::Enabled;
 use rp_pico_w::Pins;
 use rp_pico_w::hal;
 use rp_pico_w::hal::clocks::ClocksManager;
@@ -89,7 +94,7 @@ impl CustomSpiWrapper
         sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
         irq: Interrupt<PIO0, 0>,
         cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullDown>,
-        dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullDown>,
+        // dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullNone>,
         clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullDown>,
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
         tx_buf: &'static mut [u32; TX_LENGTH],
@@ -117,9 +122,6 @@ impl CustomSpiWrapper
         let dma_ch1_cell = OnceCell::new();
         dma_ch1_cell.set(dma.ch1).map_err(|_e| ()).unwrap();
 
-        // Setup IRQ (24) - also used for DO, DI
-        dio.into_pull_down_input();
-
         Self {
             sm: sm_cell,
             cs,
@@ -135,7 +137,12 @@ impl CustomSpiWrapper
     }
 
     /// Set value of scratch register X.
-    fn sm_set_x(&mut self, value: u32, tx: &mut hal::pio::Tx<(PIO0, SM0), Word>) {
+    fn sm_set_x(
+        &mut self,
+        value: u32,
+        sm: &mut StateMachine<(PIO0, SM0), Stopped>,
+        tx: &mut hal::pio::Tx<(PIO0, SM0), Word>,
+    ) {
         const OUT: InstructionOperands = InstructionOperands::OUT {
             destination: OutDestination::X,
             bit_count: 32,
@@ -143,19 +150,22 @@ impl CustomSpiWrapper
         const INSTRUCTION: Instruction = Instruction {
             operands: OUT,
             delay: 0,
-            side_set: Some(1),
+            side_set: Some(0),
         };
 
-        if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            if !tx.write(value) {
-                error!("sm_set_x: could not write to tx");
-            }
-            sm.exec_instruction(INSTRUCTION);
+        if !tx.write(value) {
+            error!("sm_set_x: could not write to tx");
         }
+        sm.exec_instruction(INSTRUCTION);
     }
 
     /// Set value of scratch register Y.
-    fn sm_set_y(&mut self, value: u32, tx: &mut hal::pio::Tx<(PIO0, SM0), Word>) {
+    fn sm_set_y(
+        &mut self,
+        value: u32,
+        sm: &mut StateMachine<(PIO0, SM0), Stopped>,
+        tx: &mut hal::pio::Tx<(PIO0, SM0), Word>,
+    ) {
         const OUT: InstructionOperands = InstructionOperands::OUT {
             destination: OutDestination::Y,
             bit_count: 32,
@@ -163,19 +173,17 @@ impl CustomSpiWrapper
         const INSTRUCTION: Instruction = Instruction {
             operands: OUT,
             delay: 0,
-            side_set: Some(1), // Don't know why this needs to be Some but it is required
+            side_set: Some(0), // Don't know why this needs to be Some but it is required
         };
 
-        if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            if !tx.write(value) {
-                error!("sm_set_y: could not write to tx");
-            }
-            sm.exec_instruction(INSTRUCTION);
+        if !tx.write(value) {
+            error!("sm_set_y: could not write to tx");
         }
+        sm.exec_instruction(INSTRUCTION);
     }
 
     /// Set instruction for pin destination.
-    unsafe fn sm_set_pin_dir(&mut self, data: u8) {
+    unsafe fn sm_set_pin_dir(&mut self, sm: &mut StateMachine<(PIO0, SM0), Stopped>, data: u8) {
         let set = InstructionOperands::SET {
             destination: SetDestination::PINDIRS,
             data,
@@ -183,16 +191,14 @@ impl CustomSpiWrapper
         let instruction = Instruction {
             operands: set,
             delay: 0,
-            side_set: Some(1),
+            side_set: Some(0),
         };
 
-        if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            sm.exec_instruction(instruction);
-        }
+        sm.exec_instruction(instruction);
     }
 
     /// Jump instruction to address.
-    unsafe fn sm_exec_jmp(&mut self, to_addr: u8) {
+    unsafe fn sm_exec_jmp(&mut self, sm: &mut StateMachine<(PIO0, SM0), Stopped>, to_addr: u8) {
         let jmp = InstructionOperands::JMP {
             address: to_addr,
             condition: pio::JmpCondition::Always,
@@ -200,29 +206,21 @@ impl CustomSpiWrapper
         let instruction = Instruction {
             operands: jmp,
             delay: 0,
-            side_set: Some(1),
+            side_set: Some(0),
         };
 
-        if let Some(SpiStateMachine::Stopped(sm)) = self.sm.get_mut() {
-            sm.exec_instruction(instruction);
-        }
+        sm.exec_instruction(instruction);
     }
 
     /// Write data to peripheral and return status.
     pub async fn write(&mut self, write: &[u32]) -> Result<u32, ()> {
         // NOTE: This is copied directly from cyw43-pio's PioSpi implementation
         // Disable the state machine
-        let sm = match self.sm.take() {
+        let mut sm = match self.sm.take() {
             Some(SpiStateMachine::Running(sm)) => sm.stop(),
             Some(SpiStateMachine::Stopped(sm)) => sm,
             _ => return Err(()),
         };
-
-        // NOTE: This must be set here or the unsafe functions will fail as they rely on self.sm
-        self.sm
-            .set(SpiStateMachine::Stopped(sm))
-            .map_err(|_e| ())
-            .unwrap();
 
         let write_bits: u32 = (write.len() as u32) * 32 - 1;
         let read_bits: u32 = 31;
@@ -231,18 +229,14 @@ impl CustomSpiWrapper
 
         let mut tx = self.tx.take().unwrap();
         unsafe {
-            self.sm_set_x(write_bits, &mut tx);
-            self.sm_set_y(read_bits, &mut tx);
-            self.sm_set_pin_dir(0b1);
-            self.sm_exec_jmp(self.wrap_target);
+            self.sm_set_x(write_bits, &mut sm, &mut tx);
+            self.sm_set_y(read_bits, &mut sm, &mut tx);
+            self.sm_set_pin_dir(&mut sm, 0b1);
+            self.sm_exec_jmp(&mut sm, self.wrap_target);
         }
 
         // Enable the state machine
-        let sm = match self.sm.take() {
-            Some(SpiStateMachine::Running(sm)) => sm,
-            Some(SpiStateMachine::Stopped(sm)) => sm.start(),
-            _ => return Err(()),
-        };
+        let sm = sm.start();
         self.sm
             .set(SpiStateMachine::Running(sm))
             .map_err(|_e| ())
@@ -307,20 +301,11 @@ impl CustomSpiWrapper
     /// Send command and read response into buffer.
     pub async fn read(&mut self, cmd: u32, read: &mut [u32]) -> Result<u32, ()> {
         // Disable the state machine
-        let sm = match self.sm.take() {
+        let mut sm = match self.sm.take() {
             Some(SpiStateMachine::Running(sm)) => sm.stop(),
             Some(SpiStateMachine::Stopped(sm)) => sm,
             _ => return Err(()),
         };
-
-        if self
-            .sm
-            .set(SpiStateMachine::Stopped(sm))
-            .map_err(|_e| ())
-            .is_err()
-        {
-            error!("failed to save stopped sm");
-        }
 
         let write_bits = 31;
         let read_bits = read.len() * 32 + 32 - 1;
@@ -334,25 +319,27 @@ impl CustomSpiWrapper
         };
 
         unsafe {
-            self.sm_set_y(read_bits as u32, &mut tx);
-            self.sm_set_x(write_bits as u32, &mut tx);
-            self.sm_set_pin_dir(0b1);
-            self.sm_exec_jmp(self.wrap_target);
+            self.sm_set_y(read_bits as u32, &mut sm, &mut tx);
+            self.sm_set_x(write_bits as u32, &mut sm, &mut tx);
+            self.sm_set_pin_dir(&mut sm, 0b1);
+            self.sm_exec_jmp(&mut sm, self.wrap_target);
         }
 
         // Enable the state machine
-        let sm = match self.sm.take() {
-            Some(SpiStateMachine::Running(sm)) => sm,
-            Some(SpiStateMachine::Stopped(sm)) => sm.start(),
-            _ => return Err(()),
-        };
-
+        let sm = sm.start();
         self.sm.set(SpiStateMachine::Running(sm)).map_err(|_e| ())?;
 
         // Transfer a single message via DMA.
         // Meme method for getting a value that lives long enough for the DMA configuration
-        let tx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.tx_buf) };
-        let rx_buf: &'static mut [u32; 1] = unsafe { core::mem::transmute(&mut self.rx_buf) };
+        info!("tx_buf: {:?}", self.tx_buf);
+        info!("rx_buf: {:?}", self.rx_buf);
+        // TODO(alec): Stuck here trying to get something that can be borrowed for 'static
+        let tx_buf: &'static mut [u32; TX_LENGTH] =
+            unsafe { core::mem::transmute(&mut self.tx_buf) };
+        let rx_buf: &'static mut [u32; RX_LENGTH] =
+            unsafe { core::mem::transmute(&mut self.rx_buf) };
+        info!("tx_buf: {:?}", tx_buf);
+        info!("rx_buf: {:?}", rx_buf);
 
         rx_buf[0] = 12;
 
@@ -363,20 +350,15 @@ impl CustomSpiWrapper
         let ch1 = self.dma_ch1.take().unwrap();
         let rx = self.rx.take().unwrap();
         let tx_config = hal::dma::single_buffer::Config::new(ch0, tx_buf, tx);
-        let tx_transfer = tx_config.start();
-
         let rx_config = hal::dma::single_buffer::Config::new(ch1, rx, rx_buf);
+
+        let tx_transfer = tx_config.start();
         let rx_transfer = rx_config.start();
 
-        info!("waiting...");
         let (ch0, _tx_buf, tx) = tx_transfer.wait();
         let (ch1, rx, rx_buf) = rx_transfer.wait();
 
         // Read status
-        // let status = match rx.read() {
-        //     Some(result) => Ok(result),
-        //     None => Err(()),
-        // };
         let status = match rx_buf.get(0) {
             Some(result) => Ok(*result),
             None => Err(()),
@@ -492,17 +474,16 @@ pub async fn wireless_main(
         ".side_set 1"
 
         ".wrap_target"
-        // always transmit multiple of 32 bytes
-        "lp:",
-        "out pins, 1             side 0"
-        "jmp x-- lp              side 1"
-        "public lp1_end:"
-        "set pindirs, 0          side 0"
-        "lp2:"
-        "in pins, 1              side 1"
-        "jmp y-- lp2             side 0"
-        "public end:"
-
+            // always transmit multiple of 32 bytes
+            "lp:",
+            "out pins, 1             side 0"
+            "jmp x-- lp              side 1"
+            "public lp1_end:"
+            "set pindirs, 0          side 0"
+            "lp2:"
+            "in pins, 1              side 1"
+            "jmp y-- lp2             side 0"
+            "public end:"
         ".wrap"
     );
 
@@ -528,9 +509,11 @@ pub async fn wireless_main(
     let mut spi_mosi_miso = pins.wl_d.into_push_pull_output();
     spi_mosi_miso.set_low().unwrap();
     spi_mosi_miso.set_sync_bypass(true);
-    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullDown> =
+    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> =
         spi_mosi_miso.reconfigure(); // GPIO24 (wl_d) - SPIO RX
     spi_mosi_miso.set_schmitt_enabled(true);
+    // Setup IRQ (24) - also used for DO, DI
+    let spi_mosi_miso = spi_mosi_miso.into_floating_input();
     let spi_mosi_miso_id = spi_mosi_miso.id().num;
 
     // SPI CS (Chip select)
@@ -552,10 +535,12 @@ pub async fn wireless_main(
     let (mut sm, rx, tx) = hal::pio::PIOBuilder::from_installed_program(installed)
         .out_pins(spi_mosi_miso_id, 1)
         .in_pin_base(spi_mosi_miso_id)
-        .side_set_pin_base(1) // TODO: Review if needed
+        .side_set_pin_base(spi_sclk_id) // TODO: Review if needed
         .set_pins(spi_mosi_miso_id, 1)
         .out_shift_direction(hal::pio::ShiftDirection::Left)
         .in_shift_direction(hal::pio::ShiftDirection::Right)
+        .pull_threshold(32)
+        .push_threshold(32)
         .autopush(true) // Matching embassy's shift_in.auto_fill = true
         .autopull(true) // Matching embassy's shift_out.auto_fill = true
         .clock_divisor_fixed_point(int, frac)
@@ -571,16 +556,6 @@ pub async fn wireless_main(
         (spi_sclk_id, PinState::Low),
     ]);
 
-    // let spi = hal::spi::Spi::<_, _, _, 8>::new(spi0, (spi_mosi_miso, spi_sclk));
-    //
-    // // Exchange the uninitialised SPI driver for an initialised one
-    // let spi = spi.init(
-    //     &mut resets,
-    //     clocks.peripheral_clock.freq(),
-    //     16_000_000u32.Hz(),
-    //     embedded_hal::spi::MODE_0,
-    // );
-
     // Set up DMA
     let dma = dma.split(&mut resets);
     let irq = pio.irq0();
@@ -593,7 +568,6 @@ pub async fn wireless_main(
         sm,
         irq,
         spi_cs,
-        spi_mosi_miso,
         spi_sclk,
         tx,
         tx_buf,
