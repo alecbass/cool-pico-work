@@ -95,7 +95,7 @@ impl JartisDriver {
             let now = self.now();
 
             if timestamp.ticks() <= now {
-                info!("alarm has elapsed, triggering...");
+                trace!("alarm has elapsed, triggering...");
                 self.trigger_alarm(cs);
             } else {
                 // Not elapsed, arm it again.
@@ -188,7 +188,7 @@ pub fn init(mut timer: Timer) {
         hal::pac::NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
     }
 
-    info!("Embassy timer driver initialised!");
+    trace!("Embassy timer driver initialised!");
 }
 
 #[interrupt]
