@@ -148,8 +148,6 @@ impl Driver for JartisDriver {
                     trace!("Re-assigned next to {}    at now time {}", next, self.now());
                 }
                 trace!("did schedule_wake at {} with now time {}", next, self.now());
-            } else {
-                warn!("nothing to wake at {}", at);
             }
 
             waker.wake_by_ref(); // TODO: Check that this is accurate

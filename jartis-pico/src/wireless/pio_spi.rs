@@ -9,6 +9,7 @@ use pio::Instruction;
 use pio::InstructionOperands;
 use pio::OutDestination;
 use pio::SetDestination;
+use rp_pico::hal::gpio::FunctionPio0;
 use rp_pico::hal::gpio::PullNone;
 use rp_pico::hal::pio::StateMachine;
 use rp_pico::hal::pio::Stopped;
@@ -18,7 +19,6 @@ use rp_pico_w::hal::dma::CH1;
 use rp_pico_w::hal::dma::Channel;
 use rp_pico_w::hal::dma::Word;
 use rp_pico_w::hal::gpio;
-use rp_pico_w::hal::gpio::FunctionSpi;
 use rp_pico_w::hal::gpio::{FunctionSioOutput, Pin};
 use rp_pico_w::hal::pio::Interrupt;
 use rp_pico_w::hal::pio::SM0;
@@ -31,7 +31,7 @@ enum SpiStateMachine {
 }
 
 // Got these from the C SDK read_reg_u32_swap function
-const TX_LENGTH: usize = 4;
+const TX_LENGTH: usize = 1;
 const RX_LENGTH: usize = 8; // Might need to increase this for the backpane queries
 
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
@@ -40,13 +40,12 @@ pub struct PioSpiCyw43 {
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,
-    clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>,
     wrap_target: u8,
     tx: OnceCell<hal::pio::Tx<(PIO0, SM0), Word>>,
     // tx_buf_ptr: *const &'static mut [u32; TX_LENGTH],
-    tx_buf_ptr: *mut u32,
+    tx_buf_ptr: *mut u32, // Pointer to the start of the tx buffer
     rx: OnceCell<hal::pio::Rx<(PIO0, SM0), Word>>,
-    rx_buf_ptr: *mut u32,
+    rx_buf_ptr: *mut u32, // Pointer to the start of the rx buffer
     dma_ch0: OnceCell<Channel<CH0>>,
     dma_ch1: OnceCell<Channel<CH1>>,
 }
@@ -61,8 +60,6 @@ impl PioSpiCyw43
         sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
         irq: Interrupt<PIO0, 0>,
         cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,
-        // dio: Pin<gpio::bank0::Gpio24, FunctionSpi, PullNone>,
-        clk: Pin<gpio::bank0::Gpio29, FunctionSpi, PullNone>,
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
         rx: hal::pio::Rx<(PIO0, SM0), Word>,
         wrap_target: u8,
@@ -94,7 +91,6 @@ impl PioSpiCyw43
         Self {
             sm: sm_cell,
             cs,
-            clk,
             wrap_target,
             tx: tx_cell,
             tx_buf_ptr: tx_buf.as_mut_ptr(),
@@ -272,8 +268,8 @@ impl PioSpiCyw43
         };
         sm.clear_fifos();
 
-        let write_bits = 31;
-        let read_bits = read.len() * 32 + 32 - 1;
+        let write_bits: u32 = 31;
+        let read_bits: u32 = (read.len() as u32) * 32 + 32 - 1;
 
         info!("cmd_read write={} read={}", write_bits, read_bits);
         info!("cmd_read cmd = {}({:02x}) len = {}", cmd, cmd, read.len());
@@ -284,8 +280,8 @@ impl PioSpiCyw43
         };
 
         unsafe {
-            self.sm_set_y(read_bits as u32, &mut sm, &mut tx);
-            self.sm_set_x(write_bits as u32, &mut sm, &mut tx);
+            self.sm_set_y(read_bits, &mut sm, &mut tx);
+            self.sm_set_x(write_bits, &mut sm, &mut tx);
             self.sm_set_pin_dir(&mut sm, 0b1);
             self.sm_exec_jmp(&mut sm, self.wrap_target);
         }
@@ -317,9 +313,10 @@ impl PioSpiCyw43
         let rx_config = hal::dma::single_buffer::Config::new(ch1, rx, &mut rx_buf[0..read.len()]);
         let rx_transfer = rx_config.start();
 
-        let (ch0, _tx_buf, tx) = tx_transfer.wait();
+        let (ch0, tx_buf, tx) = tx_transfer.wait();
         let (ch1, rx, rx_buf) = rx_transfer.wait();
 
+        info!("post-read tx-buf: {:?}", tx_buf);
         info!("post-read rx-buf: {:?}", rx_buf);
 
         // Read status

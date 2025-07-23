@@ -121,7 +121,7 @@ pub async fn wireless_main(
     let mut spi_sclk: Pin<_, gpio::FunctionSioOutput, _> =
         pins.voltage_monitor_wl_clk.into_push_pull_output();
     spi_sclk.set_low().unwrap(); // This pin needs to start in a low power state
-    let mut spi_sclk: Pin<_, gpio::FunctionSpi, gpio::PullNone> = spi_sclk.reconfigure(); // GPIO29
+    let mut spi_sclk: Pin<_, gpio::FunctionPio0, gpio::PullNone> = spi_sclk.reconfigure(); // GPIO29
     spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
     let spi_sclk_id = spi_sclk.id().num;
@@ -134,8 +134,8 @@ pub async fn wireless_main(
     // Setup IRQ (24) - also used for DO, DI
     let mut spi_mosi_miso = spi_mosi_miso.into_floating_input();
     spi_mosi_miso.set_sync_bypass(true);
-    let mut spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> =
-        spi_mosi_miso.reconfigure(); // GPIO24 (wl_d) - SPIO RX
+    let mut spi_mosi_miso: gpio::Pin<_, gpio::FunctionPio0, gpio::PullNone> =
+        spi_mosi_miso.reconfigure(); // GPIO24 (wl_d)
     spi_mosi_miso.set_schmitt_enabled(true);
     spi_mosi_miso.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_mosi_miso.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
@@ -186,7 +186,7 @@ pub async fn wireless_main(
     let irq = pio.irq0();
 
     info!("creating SPI wrapper");
-    let spi_wrapper = PioSpiCyw43::new(sm, irq, spi_cs, spi_sclk, tx, rx, wrap_target, dma);
+    let spi_wrapper = PioSpiCyw43::new(sm, irq, spi_cs, tx, rx, wrap_target, dma);
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
