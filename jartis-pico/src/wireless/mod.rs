@@ -116,26 +116,26 @@ pub async fn wireless_main(
 
     // Copied logic from cyw43-pio, but using rp2040-hal pins
 
-    // Set up our SPI pins into the correct mode. Look at cyw43_spi_gpio_setup in the C SDK for
+    // Set up our PIO pins into the correct mode. Look at cyw43_spi_gpio_setup in the C SDK for
     // reference
-    let mut spi_sclk: Pin<_, gpio::FunctionSioOutput, _> =
-        pins.voltage_monitor_wl_clk.into_push_pull_output();
-    spi_sclk.set_low().unwrap(); // This pin needs to start in a low power state
-    let mut spi_sclk: Pin<_, gpio::FunctionPio0, gpio::PullNone> = spi_sclk.reconfigure(); // GPIO29
-    spi_sclk.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
-    spi_sclk.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
+
+    // This pin needs to start in a low power state
+    let spi_sclk: Pin<_, gpio::FunctionPio0, gpio::PullNone> = pins
+        .voltage_monitor_wl_clk // GPIO29
+        .into_push_pull_output_in_state(embedded_hal::digital::PinState::Low)
+        .reconfigure();
     let spi_sclk_id = spi_sclk.id().num;
 
     // This pin needs to start in a low power state
     let spi_mosi_miso = pins
-        .wl_data
+        .wl_data // GPIO24
         .into_push_pull_output_in_state(embedded_hal::digital::PinState::Low)
         .into_floating_input();
     // Setup IRQ (24) - also used for DO, DI
     let mut spi_mosi_miso = spi_mosi_miso.into_floating_input();
     spi_mosi_miso.set_sync_bypass(true);
     let mut spi_mosi_miso: gpio::Pin<_, gpio::FunctionPio0, gpio::PullNone> =
-        spi_mosi_miso.reconfigure(); // GPIO24 (wl_d)
+        spi_mosi_miso.reconfigure();
     spi_mosi_miso.set_schmitt_enabled(true);
     spi_mosi_miso.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_mosi_miso.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
@@ -162,8 +162,8 @@ pub async fn wireless_main(
         .in_pin_base(spi_mosi_miso_id)
         .set_pins(spi_mosi_miso_id, 1)
         .side_set_pin_base(spi_sclk_id) // TODO: Review if needed
-        .out_shift_direction(hal::pio::ShiftDirection::Left)
-        .in_shift_direction(hal::pio::ShiftDirection::Right)
+        .out_shift_direction(hal::pio::ShiftDirection::Left) // Look at the sm_config_set_in_shift C call where it specifies shifting both in and out to the left
+        .in_shift_direction(hal::pio::ShiftDirection::Left)
         .pull_threshold(32)
         .push_threshold(32)
         .autopush(true) // Matching embassy's shift_in.auto_fill = true
