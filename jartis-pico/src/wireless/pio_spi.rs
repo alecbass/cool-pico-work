@@ -57,7 +57,7 @@ impl PioSpiCyw43
 // P: spi::ValidSpiPinout<D>,
 // CLK: OutputPin<Error = Infallible>,
 {
-    fn new(
+    pub fn new(
         sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
         irq: Interrupt<PIO0, 0>,
         cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,

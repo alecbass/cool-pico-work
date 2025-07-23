@@ -127,16 +127,18 @@ pub async fn wireless_main(
     let spi_sclk_id = spi_sclk.id().num;
 
     // This pin needs to start in a low power state
-    let mut spi_mosi_miso = pins.wl_d.into_push_pull_output();
-    spi_mosi_miso.set_low().unwrap();
+    let spi_mosi_miso = pins
+        .wl_data
+        .into_push_pull_output_in_state(embedded_hal::digital::PinState::Low)
+        .into_floating_input();
     // Setup IRQ (24) - also used for DO, DI
     let mut spi_mosi_miso = spi_mosi_miso.into_floating_input();
     spi_mosi_miso.set_sync_bypass(true);
+    let mut spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> =
+        spi_mosi_miso.reconfigure(); // GPIO24 (wl_d) - SPIO RX
     spi_mosi_miso.set_schmitt_enabled(true);
     spi_mosi_miso.set_drive_strength(gpio::OutputDriveStrength::TwelveMilliAmps); // From cyw43-pio
     spi_mosi_miso.set_slew_rate(gpio::OutputSlewRate::Fast); // From cyw43-pio
-    let spi_mosi_miso: gpio::Pin<_, gpio::FunctionSpi, gpio::PullNone> =
-        spi_mosi_miso.reconfigure(); // GPIO24 (wl_d) - SPIO RX
     let spi_mosi_miso_id = spi_mosi_miso.id().num;
 
     // SPI CS (Chip select)
