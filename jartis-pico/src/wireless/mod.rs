@@ -70,7 +70,7 @@ const RX_LENGTH: usize = 8; // Might need to increase this for the backpane quer
 
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
-pub struct CustomSpiWrapper {
+pub struct PioSpiCyw43 {
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
     cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,
@@ -85,7 +85,7 @@ pub struct CustomSpiWrapper {
     dma_ch1: OnceCell<Channel<CH1>>,
 }
 
-impl CustomSpiWrapper
+impl PioSpiCyw43
 // where
 // D: spi::SpiDevice,
 // P: spi::ValidSpiPinout<D>,
@@ -153,7 +153,7 @@ impl CustomSpiWrapper
         const INSTRUCTION: Instruction = Instruction {
             operands: OUT,
             delay: 0,
-            side_set: Some(0),
+            side_set: Some(1),
         };
 
         if !tx.write(value) {
@@ -176,7 +176,7 @@ impl CustomSpiWrapper
         const INSTRUCTION: Instruction = Instruction {
             operands: OUT,
             delay: 0,
-            side_set: Some(0), // Don't know why this needs to be Some but it is required
+            side_set: Some(1), // Don't know why this needs to be Some but it is required
         };
 
         if !tx.write(value) {
@@ -194,9 +194,8 @@ impl CustomSpiWrapper
         let instruction = Instruction {
             operands: set,
             delay: 0,
-            side_set: Some(0),
+            side_set: Some(1),
         };
-
         sm.exec_instruction(instruction);
     }
 
@@ -209,9 +208,8 @@ impl CustomSpiWrapper
         let instruction = Instruction {
             operands: jmp,
             delay: 0,
-            side_set: Some(0),
+            side_set: Some(1),
         };
-
         sm.exec_instruction(instruction);
     }
 
@@ -224,6 +222,7 @@ impl CustomSpiWrapper
             Some(SpiStateMachine::Stopped(sm)) => sm,
             _ => return Err(()),
         };
+        sm.clear_fifos();
 
         let write_bits: u32 = (write.len() as u32) * 32 - 1;
         let read_bits: u32 = 31;
@@ -239,7 +238,6 @@ impl CustomSpiWrapper
         }
 
         // Restart and enable the state machine
-        sm.clear_fifos();
         let mut sm = sm.start();
         sm.restart();
         self.sm
@@ -306,6 +304,7 @@ impl CustomSpiWrapper
             Some(SpiStateMachine::Stopped(sm)) => sm,
             _ => return Err(()),
         };
+        sm.clear_fifos();
 
         let write_bits = 31;
         let read_bits = read.len() * 32 + 32 - 1;
@@ -326,7 +325,6 @@ impl CustomSpiWrapper
         }
 
         // Restart and enable the state machine
-        sm.clear_fifos();
         let mut sm = sm.start();
         sm.restart();
         self.sm.set(SpiStateMachine::Running(sm)).map_err(|_e| ())?;
@@ -388,7 +386,7 @@ impl CustomSpiWrapper
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl SpiBusCyw43 for CustomSpiWrapper
+impl SpiBusCyw43 for PioSpiCyw43
 // where
 // D: spi::SpiDevice,
 // P: spi::ValidSpiPinout<D>,
@@ -475,14 +473,19 @@ pub async fn wireless_main(
 
         ".wrap_target"
             // always transmit multiple of 32 bytes
+            // write out x-1 bits
             "lp:",
             "out pins, 1             side 0"
             "jmp x-- lp              side 1"
             "public lp1_end:"
+            // switch directions
             "set pindirs, 0          side 0"
+            // read in y-1 bits
             "lp2:"
             "in pins, 1              side 1"
             "jmp y-- lp2             side 0"
+            "wait 1 pin 0            side 0" // TODO: Delete?
+            "irq 0                   side 0" // TODO: Delete?
             "public end:"
         ".wrap"
     );
@@ -563,7 +566,7 @@ pub async fn wireless_main(
     let irq = pio.irq0();
 
     info!("creating SPI wrapper");
-    let spi_wrapper = CustomSpiWrapper::new(sm, irq, spi_cs, spi_sclk, tx, rx, wrap_target, dma);
+    let spi_wrapper = PioSpiCyw43::new(sm, irq, spi_cs, spi_sclk, tx, rx, wrap_target, dma);
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
