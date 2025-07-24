@@ -4,7 +4,7 @@ use core::{
 };
 
 use critical_section::CriticalSection;
-use defmt::{error, info, trace, warn};
+use defmt::{error, trace};
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time_driver::Driver;
 use embassy_time_queue_utils::Queue;
