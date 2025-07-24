@@ -194,13 +194,13 @@ pub async fn wireless_main(
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
 
     embassy_futures::yield_now().await;
-    info!("yielded");
 
     let (_net_device, mut control, runner) =
         cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
     info!("initialised cyw43");
     info!("spawning task");
     unwrap!(spawner.spawn(cyw43_task(runner)));
+    embassy_futures::yield_now().await;
     info!("initialising control");
     control.init(clm).await;
     core::panic!("hehehehe");

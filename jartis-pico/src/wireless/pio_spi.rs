@@ -3,6 +3,7 @@ use core::cell::OnceCell;
 use cortex_m::singleton;
 use cyw43::SpiBusCyw43;
 use defmt::*;
+use embassy_futures::yield_now;
 use embedded_hal::digital::OutputPin;
 use panic_probe as _;
 use pio::Instruction;
@@ -29,8 +30,8 @@ enum SpiStateMachine {
 }
 
 // Got these from the C SDK read_reg_u32_swap function
-const TX_LENGTH: usize = 512; // Can be increased
-const RX_LENGTH: usize = 512; // Can be increased
+const TX_LENGTH: usize = 1024; // Can be increased
+const RX_LENGTH: usize = 1024; // Can be increased
 
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
@@ -274,7 +275,6 @@ impl PioSpiCyw43
         let read_bits: u32 = (read.len() as u32) * 32 + 32 - 1;
         // let read_bits = (read.len() - (TX_LENGTH + 1)) as u32 * 32 - 1; // However many 32-bit values we're reading
 
-        info!("reading: {:?}   bits: {}", read, read_bits);
         trace!("cmd_read write={} read={}", write_bits, read_bits);
         trace!("cmd_read cmd = {}({:02x}) len = {}", cmd, cmd, read.len());
 
@@ -367,12 +367,7 @@ impl PioSpiCyw43
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
-impl SpiBusCyw43 for PioSpiCyw43
-// where
-// D: spi::SpiDevice,
-// P: spi::ValidSpiPinout<D>,
-// CLK: OutputPin<Error = Infallible>,
-{
+impl SpiBusCyw43 for PioSpiCyw43 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
         let status = self.read(write, read).await.unwrap();
@@ -397,8 +392,7 @@ impl SpiBusCyw43 for PioSpiCyw43
         // while self.spi.is_busy() {
         //     trace!("waiting for event");
         // }
-        loop {
-            trace!("waiting for event");
-        }
+        // NOTE: This is the same as the default embassy trait. Maybe remote this
+        yield_now().await;
     }
 }
