@@ -1,5 +1,6 @@
 use core::cell::OnceCell;
 
+use cortex_m::delay::Delay;
 use cortex_m::singleton;
 use cyw43::SpiBusCyw43;
 use defmt::*;
@@ -47,6 +48,7 @@ pub struct PioSpiCyw43 {
     rx_buf_ptr: *mut u32, // Pointer to the start of the rx buffer
     dma_ch0: OnceCell<Channel<CH0>>,
     dma_ch1: OnceCell<Channel<CH1>>,
+    delay: Delay,
 }
 
 impl PioSpiCyw43
@@ -62,6 +64,7 @@ impl PioSpiCyw43
         rx: hal::pio::Rx<(PIO0, SM0), Word>,
         wrap_target: u8,
         dma: hal::dma::Channels,
+        delay: Delay,
     ) -> Self {
         let sm_cell = OnceCell::new();
         sm_cell
@@ -95,6 +98,7 @@ impl PioSpiCyw43
             rx_buf_ptr: rx_buf.as_mut_ptr(),
             dma_ch0: dma_ch0_cell,
             dma_ch1: dma_ch1_cell,
+            delay,
         }
     }
 
@@ -378,7 +382,15 @@ impl SpiBusCyw43 for PioSpiCyw43 {
     async fn cmd_write(&mut self, write: &[u32]) -> u32 {
         self.cs.set_low().unwrap();
         trace!("writing {}", write);
+
+        if write.len() > 64 {
+            self.delay.delay_ms(100);
+        }
         let status = self.write(write).await.unwrap();
+        if write.len() > 64 {
+            self.delay.delay_ms(100);
+        }
+
         self.cs.set_high().unwrap();
         status
     }
