@@ -199,6 +199,7 @@ pub async fn wireless_main(
         cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
     info!("initialised cyw43");
     info!("spawning task");
+
     // NOTE: Current error: BdcHeader is invalid. Look at cyw43/structs.rs:196
     unwrap!(spawner.spawn(cyw43_task(runner)));
 

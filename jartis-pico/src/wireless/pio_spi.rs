@@ -32,7 +32,7 @@ enum SpiStateMachine {
 
 // Got these from the C SDK read_reg_u32_swap function
 const TX_LENGTH: usize = 1024; // Can be increased
-const RX_LENGTH: usize = 1024; // Can be increased
+const RX_LENGTH: usize = 512; // Can be increased
 
 /// Wrapper for the SPI bus that implements the `SpiBusCyw43`
 /// This is only its own struct due to orphan implementation rules
@@ -49,6 +49,7 @@ pub struct PioSpiCyw43 {
     dma_ch0: OnceCell<Channel<CH0>>,
     dma_ch1: OnceCell<Channel<CH1>>,
     delay: Delay,
+    should_delay_spi: bool,
 }
 
 impl PioSpiCyw43
@@ -99,6 +100,7 @@ impl PioSpiCyw43
             dma_ch0: dma_ch0_cell,
             dma_ch1: dma_ch1_cell,
             delay,
+            should_delay_spi: false,
         }
     }
 
@@ -368,30 +370,50 @@ impl PioSpiCyw43
 
         status
     }
+
+    pub fn set_should_delay_spi(&mut self, should_delay_spi: bool) {
+        self.should_delay_spi = should_delay_spi;
+    }
 }
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
 impl SpiBusCyw43 for PioSpiCyw43 {
     async fn cmd_read(&mut self, write: u32, read: &mut [u32]) -> u32 {
         self.cs.set_low().unwrap();
+        trace!("reading {} words", read.len());
+
+        if self.should_delay_spi {
+            self.delay.delay_ms(64);
+        }
+
         let status = self.read(write, read).await.unwrap();
+
         self.cs.set_high().unwrap();
+
+        if self.should_delay_spi {
+            self.delay.delay_ms(64);
+        }
+        self.should_delay_spi = false;
         status
     }
 
     async fn cmd_write(&mut self, write: &[u32]) -> u32 {
         self.cs.set_low().unwrap();
-        trace!("writing {}", write);
+        // NOTE: Writing to WLAN can be reached if a delay is used
+        self.should_delay_spi = write.len() >= 200;
 
-        if write.len() > 64 {
-            self.delay.delay_ms(100);
+        trace!("writing {} words", write.len());
+
+        if self.should_delay_spi {
+            self.delay.delay_ms(64);
         }
+
         let status = self.write(write).await.unwrap();
-        if write.len() > 64 {
-            self.delay.delay_ms(100);
-        }
-
         self.cs.set_high().unwrap();
+
+        if self.should_delay_spi {
+            self.delay.delay_ms(64);
+        }
         status
     }
 
