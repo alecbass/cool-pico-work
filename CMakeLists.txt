@@ -23,6 +23,30 @@ project(
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+# Disable default Pico runtime configuration
+# set(PICO_RUNTIME_NO_INIT_BOOTROM_RESET 1)
+# set(PICO_RUNTIME_SKIP_INIT_BOOTROM_RESET 1)
+# set(PICO_RUNTIME_NO_INIT_BOOTROM_RESET 1)
+# set(PICO_RUNTIME_SKIP_INIT_BOOTROM_RESET 1)
+# set(PICO_RUNTIME_SKIP_INIT_PER_CORE_H3_IRQ_REGISTERS 1)
+# set(PICO_RUNTIME_NO_INIT_EARLY_RESETS 1)
+# set(PICO_RUNTIME_SKIP_INIT_EARLY_RESETS 1)
+# set(PICO_RUNTIME_SKIP_INIT_USB_POWER_DOWN 1)
+# set(PICO_RUNTIME_NO_INIT_PER_CORE_ENABLE_COPROCESSORS 1)
+# set(PICO_RUNTIME_SKIP_INIT_PER_CORE_ENABLE_COPROCESSORS 1)
+# set(PICO_RUNTIME_SKIP_INIT_CLOCKS 1)
+# set(PICO_RUNTIME_NO_INIT_POST_CLOCK_RESETS 1)
+# set(PICO_RUNTIME_SKIP_POST_CLOCK_RESETS 1)
+# set(PICO_RUNTIME_NO_INIT_RP2040_GPIO_IE_DISABLE 1)
+# set(PICO_IE_26_29_UNCHANGED_ON_RESET 1)
+# set(PICO_RUNTIME_SKIP_INIT_RP2040_GPIO_IE_DISABLE 1)
+# set(PICO_RUNTIME_NO_INIT_SPIN_LOCKS_RESET 1)
+# set(PICO_RUNTIME_SKIP_INIT_SPIN_LOCKS_RESET 1)
+# set(PICO_RUNTIME_NO_INIT_INSTALL_RAM_VECTOR_TABLE 1)
+# set(PICO_NO_RAM_VECTOR_TABLE 1)
+# set(PICO_NO_STORED_VECTOR_TABLE 1)
+# set(PICO_RUNTIME_SKIP_INIT_INSTALL_RAM_VECTOR_TABLE 1)
+
 # 2. SDK Libraries to Build: Semicolon-separated list. Adjust as needed.
 set(PICO_SDK_TARGET_LIBS
     pico_stdlib         # Base library, almost always needed
@@ -61,11 +85,11 @@ set(CMAKE_OBJCOPY      "${TOOLCHAIN_PREFIX}objcopy")
 set(CMAKE_OBJDUMP      "${TOOLCHAIN_PREFIX}objdump")
 
 pico_sdk_init()
-add_library(${LIBRARY_NAME} jartis/src/jartis.c jartis/src/jartis.h)
-# add_executable(${LIBRARY_NAME} jartis/src/jartis.c)
-# pico_enable_stdio_usb(${LIBRARY_NAME} 1)
-# pico_enable_stdio_uart(${LIBRARY_NAME} 1)
-# pico_add_extra_outputs(${LIBRARY_NAME})
+# add_library(${LIBRARY_NAME} jartis/src/jartis.c jartis/src/jartis.h)
+add_executable(${LIBRARY_NAME} jartis/src/jartis.c)
+pico_enable_stdio_usb(${LIBRARY_NAME} 1)
+pico_enable_stdio_uart(${LIBRARY_NAME} 1)
+pico_add_extra_outputs(${LIBRARY_NAME})
 
 target_include_directories(${LIBRARY_NAME} PRIVATE jartis/src)
 target_link_libraries(${LIBRARY_NAME} ${PICO_SDK_TARGET_LIBS})

@@ -42,10 +42,9 @@ int connectToWifi() {
 
     printf("connected\n");
 
-    return 24;
+    return 0;
 }
 
-// int main() {
-//     connectToWifi();
-//     return 0;
-// }
+int main() {
+    return connectToWifi();
+}
