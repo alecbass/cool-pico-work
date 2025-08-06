@@ -32,7 +32,7 @@ async fn cyw43_task(
         PioSpiCyw43,
     >,
 ) -> ! {
-    debug!("running task");
+    info!("running task");
     runner.run().await
 }
 
@@ -196,9 +196,9 @@ pub async fn wireless_main(
 
     embassy_futures::yield_now().await;
 
-    info!("awaiting for timer to await");
-    Timer::after_secs(1).await;
-    info!("awaited timer");
+    // info!("awaiting for timer to await");
+    // Timer::after_secs(1).await;
+    // info!("awaited timer");
 
     // Current error: TIMER_IRQ_0 is not firing so the runner never picks up on the next event
     let (_net_device, mut control, runner) =
@@ -211,7 +211,6 @@ pub async fn wireless_main(
 
     info!("initialising control");
     control.init(clm).await;
-    core::panic!("hehehehe");
     info!("initialised control");
     control
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
@@ -223,10 +222,10 @@ pub async fn wireless_main(
         // delay.delay_ms(250);
         info!("led on!");
         control.gpio_set(0, true).await;
-        delay.delay_ms(1000);
+        // delay.delay_ms(1000);
 
         info!("led off!");
         control.gpio_set(0, false).await;
-        delay.delay_ms(1000);
+        // delay.delay_ms(1000);
     }
 }
