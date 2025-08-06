@@ -20,7 +20,6 @@ rp-pico-w = { workspace = true }
 jartis = { path = "../jartis" }
 
 # For unit conversions
-fugit = { workspace = true }
 heapless = { workspace = true }
 
 # CYW43 Wireless Functionality

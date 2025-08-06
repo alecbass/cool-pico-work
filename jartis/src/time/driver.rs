@@ -158,7 +158,7 @@ impl TimerDriver {
     }
 
     fn check_alarm(&self) {
-        trace!("checking alarm");
+       trace!("checking alarm");
         critical_section::with(|cs| {
             self.alarm
                 .borrow(cs)

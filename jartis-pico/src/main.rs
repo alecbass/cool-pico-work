@@ -4,7 +4,6 @@
 #![no_std]
 #![no_main]
 
-use bsp::Pins;
 use bsp::hal::clocks::{Clock, init_clocks_and_plls};
 use bsp::hal::entry; // Usual import of bsp::entry is disabled due to the disabled "rt" feature
 use bsp::hal::pac;
@@ -14,8 +13,9 @@ use cortex_m::delay::Delay;
 use cortex_m_rt as _;
 use defmt::*;
 use defmt_rtt as _;
+use embedded_hal::digital::OutputPin;
 use panic_probe as _;
-use rp_pico as bsp;
+use rp_pico_w as bsp;
 
 mod rfid_flasher;
 
@@ -138,7 +138,8 @@ fn main() -> ! {
         );
 
         let timer = bsp::hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
-        wireless::embassy_timer_driver::init(timer);
+        wireless::embassy_timer_driver::init(timer)
+            .expect("Could not initialise Embassy timer driver");
 
         executor.run(|spawner| {
             spawner.must_spawn(wireless_main(

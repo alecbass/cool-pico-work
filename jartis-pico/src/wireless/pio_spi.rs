@@ -11,6 +11,8 @@ use pio::Instruction;
 use pio::InstructionOperands;
 use pio::OutDestination;
 use pio::SetDestination;
+use rp_pico::hal::dma::ReadTarget;
+use rp_pico::hal::dma::WriteTarget;
 use rp_pico::hal::gpio::PullNone;
 use rp_pico::hal::pio::StateMachine;
 use rp_pico::hal::pio::Stopped;
@@ -194,7 +196,7 @@ impl PioSpiCyw43
             _ => return Err(()),
         };
 
-        let write_bits: u32 = (write.len() as u32) * 32 - 1; // However many 32-bit value we're writing
+        let write_bits: u32 = (write.len() as u32) * 32 - 1; // However many 32-bit values we're writing
         let read_bits: u32 = 31; // Only reading one 32-bit value (assuming we lose one bit for signed-ness?)
 
         trace!("cmd_write: write={} read={}", write_bits, read_bits);
@@ -315,28 +317,24 @@ impl PioSpiCyw43
         let tx_transfer = tx_config.start();
         let (ch0, _tx_buf, tx) = tx_transfer.wait();
 
-        // Keep reading until a value is found
-        trace!("pre-read rx-buf: {:?} read_bits: {}", rx_buf, read_bits);
-
         let read_len = (read_bits as usize + 1) / 32;
-
-        trace!("diff: {} {}", read_len, read.len());
         let rx_config = hal::dma::single_buffer::Config::new(ch1, rx, &mut rx_buf[0..read_len]);
         let rx_transfer = rx_config.start();
-
-        trace!("waiting");
         let (ch1, rx, rx_buf) = rx_transfer.wait();
-        trace!("waited :)");
-
-        trace!("post-read rx-buf: {:?}", rx_buf);
 
         // Copy the data into the read buffer
+        // read.len() should be read_len - 1
+        if read.len() != read_len - 1 {
+            error!("Non-matching read length");
+            return Err(());
+        }
+
         for i in 0..read.len() {
             read[i] = rx_buf[i];
         }
 
-        // Read status
-        let status = match rx_buf.get(0) {
+        // Read status, which should be the last word
+        let status = match rx_buf.last() {
             Some(result) => Ok(result.rotate_left(16)),
             None => Err(()),
         };
@@ -351,7 +349,7 @@ impl PioSpiCyw43
 
         if let Ok(ref s) = status {
             // Print status as hexadecimal;
-            trace!("hex status = {:#x}", s);
+            trace!("hex status = {:#x}    read {:#x} words", s, read_len);
 
             // if *s == 0xFEEDBEAD {
             // error!("READING THE CORRECT STATUS VALUE!!!");
@@ -370,11 +368,9 @@ impl PioSpiCyw43
 
         status
     }
-
-    pub fn set_should_delay_spi(&mut self, should_delay_spi: bool) {
-        self.should_delay_spi = should_delay_spi;
-    }
 }
+
+const DELAY: u32 = 16;
 
 /// Terrible implementation to allow rp2040-hal's SPIO to be used with the cyw43 driver
 impl SpiBusCyw43 for PioSpiCyw43 {
@@ -383,7 +379,7 @@ impl SpiBusCyw43 for PioSpiCyw43 {
         trace!("reading {} words", read.len());
 
         if self.should_delay_spi {
-            self.delay.delay_ms(64);
+            self.delay.delay_us(DELAY);
         }
 
         let status = self.read(write, read).await.unwrap();
@@ -391,7 +387,7 @@ impl SpiBusCyw43 for PioSpiCyw43 {
         self.cs.set_high().unwrap();
 
         if self.should_delay_spi {
-            self.delay.delay_ms(64);
+            self.delay.delay_us(DELAY);
         }
         self.should_delay_spi = false;
         status
@@ -405,14 +401,14 @@ impl SpiBusCyw43 for PioSpiCyw43 {
         trace!("writing {} words", write.len());
 
         if self.should_delay_spi {
-            self.delay.delay_ms(64);
+            self.delay.delay_us(DELAY);
         }
 
         let status = self.write(write).await.unwrap();
         self.cs.set_high().unwrap();
 
         if self.should_delay_spi {
-            self.delay.delay_ms(64);
+            self.delay.delay_us(DELAY);
         }
         status
     }

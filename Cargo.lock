@@ -1158,7 +1158,6 @@ dependencies = [
  "embassy-usb-logger",
  "embedded-hal 1.0.0",
  "embedded-hal-nb",
- "fugit",
  "heapless",
  "jartis",
  "panic-probe",

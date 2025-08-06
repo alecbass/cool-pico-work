@@ -1,6 +1,7 @@
 use cortex_m::delay::Delay;
 use defmt::*;
 use embassy_executor::Spawner;
+use embassy_time::{Duration, Timer};
 use embedded_hal::digital::OutputPin;
 use panic_probe as _;
 use pio::pio_asm;
@@ -53,7 +54,7 @@ pub async fn wireless_main(
 
     let mut led_pin = pins.gpio14.into_push_pull_output();
     led_pin.set_interrupt_enabled(gpio::Interrupt::EdgeLow, true); // Remove this
-    led_pin.set_low().unwrap();
+    led_pin.set_high().unwrap();
 
     // Define the CYW43 program, taken from cyw43-pio
     let default_program = pio_asm!(
@@ -97,7 +98,7 @@ pub async fn wireless_main(
             // read in y-1 bits
             "lp2:"
             "nop side 0 [1]" // DEBUG
-            "in pins, 1              side 1 [1]" // CYW43 might be fast, use an extra delay cycle
+            "in pins, 1              side 1 [0]" // CYW43 might be fast, use an extra delay cycle
             "jmp y-- lp2             side 0"
             "wait 1 pin 0            side 0" // TODO: Delete?
             "irq 0                   side 0" // TODO: Delete?
@@ -195,6 +196,11 @@ pub async fn wireless_main(
 
     embassy_futures::yield_now().await;
 
+    info!("awaiting for timer to await");
+    Timer::after_secs(1).await;
+    info!("awaited timer");
+
+    // Current error: TIMER_IRQ_0 is not firing so the runner never picks up on the next event
     let (_net_device, mut control, runner) =
         cyw43::new(state, pwr, spi_wrapper, cyw43_firmware).await;
     info!("initialised cyw43");

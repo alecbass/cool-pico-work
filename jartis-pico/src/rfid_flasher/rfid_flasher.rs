@@ -1,13 +1,13 @@
 use core::fmt::Write;
 
 use cortex_m::delay::Delay;
-use fugit::RateExtU32;
 use jartis::i2c::I2CHandler;
 use jartis::piicodev_rfid::rfid::PiicoDevRfid;
 use jartis::piicodev_ssd1306::PiicoDevSSD1306;
 use jartis::uart::{Uart, UartPins};
 use rp_pico::Pins;
 use rp_pico::hal::clocks::ClocksManager;
+use rp_pico::hal::fugit::RateExtU32;
 use rp_pico::hal::gpio::{
     FunctionI2C, FunctionUart, PullNone, PullUp,
     bank0::{Gpio0, Gpio1},
