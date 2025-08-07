@@ -9,12 +9,18 @@
 // const char ssid[] = "A Network";
 // const char pass[] = "A Password";
 
+Servo* servo;
+
 void gpio_callback(uint pin, uint32_t events) {
     // Put the GPIO event(s) that just happened into event_str
     // so we can print it
     // gpio_event_string(event_str, events);
     printf("GPIO THING in %d\n", pin);
     // printf("GPIO %d %s\n", gpio, event_str);
+
+    if (servo != NULL) {
+        shuffleServo(servo);
+    }
 }
 
 void initButtonIrq(const uint buttonActionPin, const uint buttonListenerPin) {
@@ -50,7 +56,7 @@ int connectToWifi() {
 
     initButtonIrq(BUTTON_ACTION_PIN, BUTTON_LISTENER_PIN);
 
-    Servo* servo = initServo(SERVO_PIN);
+    servo = initServo(SERVO_PIN);
     moveServo(servo, 0.0);
 
     if (cyw43_arch_init()) {

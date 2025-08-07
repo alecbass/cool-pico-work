@@ -7,3 +7,4 @@ typedef struct {
 
 Servo* initServo(const uint servoPin);
 void moveServo(Servo* servo, float degree);
+void shuffleServo(Servo* servo);

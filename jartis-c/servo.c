@@ -56,3 +56,14 @@ void moveServo(Servo* servo, float degree) {
 	pwm_set_gpio_level(servo->pin, duty);
     servo->degree = degree;
 }
+
+/** Move the servo ten degrees */
+void shuffleServo(Servo* servo) {
+    float degree = servo->degree + 10.0;
+
+    if (degree > 180.0) {
+        degree = 0.0;
+    }
+
+    moveServo(servo, degree);
+}
