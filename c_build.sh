@@ -31,6 +31,7 @@ export CMAKE_LIBRARY_PATH="$CMAKE_LIBRARY_PATH:$c_lib_dir"
 # Exporting compile commands creates a compile_commands.json that lets clangd find header files
 cmake \
     -DPICO_BOARD=pico_w \
+    -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
     -DARM_EMBEDDED_DIR="$arm_embedded_dir" \
     -DPICO_SDK_PATH="$PICO_SDK_PATH" \
