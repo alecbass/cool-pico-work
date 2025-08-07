@@ -36,7 +36,7 @@ void initButtonIrq(const uint buttonActionPin, const uint buttonListenerPin) {
     gpio_put(buttonListenerPin, false); // Make sure the pin is low to start with
 
     // Listening pin
-    gpio_set_irq_enabled_with_callback(buttonActionPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+    uint32_t interruptFlags = GPIO_IRQ_EDGE_FALL; // \ GPIO_IRQ_EDGE_RISE;
     gpio_set_irq_enabled_with_callback(buttonListenerPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
 }
 
@@ -64,8 +64,6 @@ int connectToWifi() {
         return -1;
     }
 
-    float degree = 0.0;
-
     while (true) {
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
         gpio_put(LED_PIN, false);
@@ -75,13 +73,6 @@ int connectToWifi() {
         gpio_put(LED_PIN, true);
         sleep_ms(1000);
         printf("enabled\n");
-
-        // moveServo(servo, degree);
-        degree += 180.0;
-
-        if (degree > 180.0) {
-            degree = 0.0;
-        }
     }
 
     free(servo);

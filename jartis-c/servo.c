@@ -7,6 +7,7 @@
 
 #define ROTATE_0 700 //Rotate to 0° position
 #define ROTATE_180 2300
+#define MAX_DEGREE 180.0
 
 Servo* initServo(const uint servoPin) {
     gpio_set_function(servoPin, GPIO_FUNC_PWM);
@@ -43,14 +44,14 @@ Servo* initServo(const uint servoPin) {
 }
 
 void moveServo(Servo* servo, float degree) {
-    if (degree > 180.0){
+    if (degree > MAX_DEGREE){
 		return;
 	}
 	if (degree < 0){
 		return;
 	}
 
-	int duty = (((float)(ROTATE_180 - ROTATE_0) / 180.0) * degree) + ROTATE_0;
+	int duty = (((float)(ROTATE_180 - ROTATE_0) / MAX_DEGREE) * degree) + ROTATE_0;
 
 	printf("PWM for %f deg is %d duty\n", degree, duty);
 	pwm_set_gpio_level(servo->pin, duty);
@@ -61,7 +62,7 @@ void moveServo(Servo* servo, float degree) {
 void shuffleServo(Servo* servo) {
     float degree = servo->degree + 10.0;
 
-    if (degree > 180.0) {
+    if (degree > MAX_DEGREE) {
         degree = 0.0;
     }
 
