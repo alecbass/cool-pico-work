@@ -5,22 +5,16 @@ use cyw43::SpiBusCyw43;
 use defmt::*;
 use embassy_futures::yield_now;
 use embedded_hal::digital::OutputPin;
+use hal::dma::CH0;
+use hal::dma::CH1;
+use hal::dma::Channel;
+use hal::dma::Word;
+use hal::gpio::PullNone;
+use hal::gpio::{FunctionSioOutput, Pin};
+use hal::pio::{Interrupt, InterruptState, PIO, PIOExt, SM0, StateMachine, Stopped};
 use panic_probe as _;
-use pio::Instruction;
-use pio::InstructionOperands;
-use pio::OutDestination;
-use pio::SetDestination;
-use rp_pico::hal::gpio::PullNone;
-use rp_pico::hal::pio::StateMachine;
-use rp_pico::hal::pio::Stopped;
+use pio::{Instruction, InstructionOperands, OutDestination, SetDestination};
 use rp_pico_w::hal;
-use rp_pico_w::hal::dma::CH0;
-use rp_pico_w::hal::dma::CH1;
-use rp_pico_w::hal::dma::Channel;
-use rp_pico_w::hal::dma::Word;
-use rp_pico_w::hal::gpio;
-use rp_pico_w::hal::gpio::{FunctionSioOutput, Pin};
-use rp_pico_w::hal::pio::SM0;
 use rp_pico_w::pac::PIO0;
 
 /// Represents a state machine that can be either running or stopped
@@ -38,7 +32,7 @@ const RX_LENGTH: usize = 1024; // Can be increased
 pub struct PioSpiCyw43 {
     // spi: spi::Spi<spi::Enabled, D, P, 8>,
     sm: OnceCell<SpiStateMachine>,
-    cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,
+    cs: Pin<hal::gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,
     wrap_target: u8,
     tx: OnceCell<hal::pio::Tx<(PIO0, SM0), Word>>,
     // tx_buf_ptr: *const &'static mut [u32; TX_LENGTH],
@@ -47,6 +41,7 @@ pub struct PioSpiCyw43 {
     rx_buf_ptr: *mut u32, // Pointer to the start of the rx buffer
     dma_ch0: OnceCell<Channel<CH0>>,
     dma_ch1: OnceCell<Channel<CH1>>,
+    pio: PIO<PIO0>,
 }
 
 impl PioSpiCyw43
@@ -57,11 +52,12 @@ impl PioSpiCyw43
 {
     pub fn new(
         sm: hal::pio::StateMachine<(PIO0, SM0), hal::pio::Stopped>,
-        cs: Pin<gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,
+        cs: Pin<hal::gpio::bank0::Gpio25, FunctionSioOutput, PullNone>,
         tx: hal::pio::Tx<(PIO0, SM0), Word>,
         rx: hal::pio::Rx<(PIO0, SM0), Word>,
         wrap_target: u8,
         dma: hal::dma::Channels,
+        pio: PIO<PIO0>,
     ) -> Self {
         let sm_cell = OnceCell::new();
         sm_cell
@@ -95,6 +91,7 @@ impl PioSpiCyw43
             rx_buf_ptr: rx_buf.as_mut_ptr(),
             dma_ch0: dma_ch0_cell,
             dma_ch1: dma_ch1_cell,
+            pio,
         }
     }
 
@@ -379,6 +376,13 @@ impl SpiBusCyw43 for PioSpiCyw43 {
     }
 
     async fn wait_for_event(&mut self) {
+        let irq = self.pio.irq0();
+        let state = irq.state();
+
+        // TODO: Try make this work
+        while state.sm0() || state.sm0_rx_not_empty() || state.sm0_tx_not_full() {
+            info!("waiting for SpiBus event");
+        }
         // NOTE: Not sure how to mimic cyw43-pio's wait_for_event here
         // while self.dma.ch0.check_irq0() || self.spi.is_busy() {}
         // while self.dma.ch0.check_irq0() {
@@ -388,6 +392,7 @@ impl SpiBusCyw43 for PioSpiCyw43 {
         //     trace!("waiting for event");
         // }
         // NOTE: This is the same as the default embassy trait. Maybe remote this
+        // core::future::pending::<()>().await
         yield_now().await;
     }
 }

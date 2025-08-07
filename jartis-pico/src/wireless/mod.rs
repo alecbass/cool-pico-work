@@ -90,7 +90,7 @@ pub async fn wireless_main(
             // write out x-1 bits
             "lp:",
             "nop side 0 [1]" // DEBUG
-            "out pins, 1             side 0 [0]" // CYW43 might be fast, use an extra delay cycle
+            "out pins, 1             side 0 [1]" // CYW43 might be fast, use an extra delay cycle
             "jmp x-- lp              side 1"
             "public lp1_end:"
             // switch directions
@@ -187,24 +187,10 @@ pub async fn wireless_main(
 
     // Set up DMA
     let dma = dma.split(&mut resets);
-
-    let spi_wrapper = PioSpiCyw43::new(sm, spi_cs, tx, rx, wrap_target, dma);
+    let spi_wrapper = PioSpiCyw43::new(sm, spi_cs, tx, rx, wrap_target, dma, pio);
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
-
-    embassy_futures::yield_now().await;
-
-    Timer::after_secs(1).await;
-    info!("awaited timer");
-
-    loop {
-        let instant_now = embassy_time::Instant::now();
-        info!("now: {} {}", instant_now.as_ticks(), instant_now.as_secs());
-
-        delay.delay_ms(50);
-        break;
-    }
 
     // Current error: TIMER_IRQ_0 is not firing so the runner never picks up on the next event
     let (_net_device, mut control, runner) =
