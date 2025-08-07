@@ -189,7 +189,7 @@ pub async fn wireless_main(
     let dma = dma.split(&mut resets);
 
     info!("creating SPI wrapper");
-    let spi_wrapper = PioSpiCyw43::new(sm, spi_cs, tx, rx, wrap_target, dma, delay);
+    let spi_wrapper = PioSpiCyw43::new(sm, spi_cs, tx, rx, wrap_target, dma);
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
     let clm = include_bytes!("../../../cyw43/43439A0_clm.bin");
@@ -206,7 +206,6 @@ pub async fn wireless_main(
     info!("initialised cyw43");
     info!("spawning task");
 
-    // NOTE: Current error: BdcHeader is invalid. Look at cyw43/structs.rs:196
     unwrap!(spawner.spawn(cyw43_task(runner)));
 
     info!("initialising control");

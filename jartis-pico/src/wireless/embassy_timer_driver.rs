@@ -4,7 +4,7 @@ use core::{
 };
 
 use critical_section::CriticalSection;
-use defmt::{error, info};
+use defmt::{error, info, warn};
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time_driver::Driver;
 use embassy_time_queue_utils::Queue;
@@ -66,6 +66,7 @@ impl JartisDriver {
         if at <= now {
             // If alarm timestamp has passed the alarm will not fire.
             // Disarm the alarm and return `false` to indicate that.
+            warn!("alarm timestamp has passed");
             alarm0.disable_interrupt();
             alarm.timestamp.set(Instant::from_ticks(FAKE_ALARM));
             return false;
@@ -77,7 +78,6 @@ impl JartisDriver {
     fn check_alarm(&self) {
         // Which alarm we're seeing should be triggered
         critical_section::with(|cs| {
-            info!("Checking alarm");
             let mut alarm0 = self.timer_alarm.borrow(cs).borrow_mut();
             let alarm0 = alarm0.as_mut().unwrap();
 
@@ -115,7 +115,7 @@ impl JartisDriver {
             .next_expiration(self.now());
         info!("scheduling alarm for {} vs {}", next, self.now());
         while !self.set_alarm(cs, next, alarm) {
-            info!("scheduling alarm for {} vs {}", next, self.now());
+            info!("loop: scheduling alarm for {} vs {}", next, self.now());
             next = self
                 .queue
                 .borrow(cs)
@@ -143,13 +143,10 @@ impl Driver for JartisDriver {
             let mut alarm0 = alarm0.as_mut().unwrap();
 
             if queue.schedule_wake(at, waker) {
-                info!("schedule wake exists");
                 let mut next = queue.next_expiration(self.now());
                 while !self.set_alarm(cs, next, &mut alarm0) {
                     next = queue.next_expiration(self.now());
-                    info!("Re-assigned next to {}    at now time {}", next, self.now());
                 }
-                info!("did schedule_wake at {} with now time {}", next, self.now());
             }
         });
     }
@@ -161,7 +158,7 @@ pub enum TimeDriverError {
     InitCannotSchedule,
 }
 
-const WAIT_TIME: MicrosDurationU32 = MicrosDurationU32::secs(2);
+const WAIT_TIME: MicrosDurationU32 = MicrosDurationU32::secs(0);
 
 /// # Safety
 /// Must be called exactly once at bootup
@@ -183,7 +180,7 @@ pub fn init(mut timer: Timer) -> Result<(), TimeDriverError> {
 
         // Initialise the alarm states
         let alarm_state = DRIVER.alarm.borrow(cs);
-        alarm_state.timestamp.set(Instant::from_ticks(FAKE_ALARM));
+        alarm_state.timestamp.set(Instant::from_ticks(0));
 
         Ok(())
     });
