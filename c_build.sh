@@ -19,11 +19,13 @@ if [[ ! -d build ]]; then
     mkdir build
 fi
 
+cp ./lwipopts.h build/
 cd build || exit 1
 
 # Build C library
 cp "${PICO_SDK_PATH}/external/pico_sdk_import.cmake" ..
 
+echo "$arm_embedded_dir"
 export CMAKE_LIBRARY_PATH="$CMAKE_LIBRARY_PATH:$c_lib_dir"
 
 # Exporting compile commands creates a compile_commands.json that lets clangd find header files
@@ -34,6 +36,15 @@ cmake \
     -DPICO_SDK_PATH="$PICO_SDK_PATH" \
     ..
 make
+
+make_static_library=$1
+
+if [[ -z $make_static_library ]]; then
+    echo "Only building C library, exiting..."
+    exit 0
+fi
+
+exit 0
 
 # NOTE: Make will fail as it attempts to build a .uf2 file
 # We want to find recreate the steps to get a .a file and then link it into our Rust binary

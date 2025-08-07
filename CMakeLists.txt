@@ -9,6 +9,20 @@ if(NOT PICO_SDK_PATH OR NOT EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
     message(FATAL_ERROR "PICO_SDK_PATH is not set or invalid ('${PICO_SDK_PATH}'). Please set the environment variable or use -DPICO_SDK_PATH=...")
 endif()
 message(STATUS "Using Pico SDK source from: ${PICO_SDK_PATH}")
+message(STATUS "Using ARM embedded toolchain from: ${ARM_EMBEDDED_DIR}")
+
+# --- Toolchain Configuration ---
+# Ensure ARM GCC toolchain executables (arm-none-eabi-gcc etc.) are in your PATH
+# We explicitly pass these to the external project's CMake configuration.
+# set(TOOLCHAIN_PREFIX "arm-none-eabi-")
+set(TOOLCHAIN_PREFIX "${ARM_EMBEDDED_DIR}/bin/arm-none-eabi-")
+message(STATUS "Toolchain prefix: ${TOOLCHAIN_PREFIX}")
+set(CMAKE_C_COMPILER   "${TOOLCHAIN_PREFIX}gcc")
+set(CMAKE_CXX_COMPILER "${TOOLCHAIN_PREFIX}g++")
+set(CMAKE_ASM_COMPILER "${TOOLCHAIN_PREFIX}gcc")
+set(CMAKE_AR           "${TOOLCHAIN_PREFIX}ar")
+set(CMAKE_OBJCOPY      "${TOOLCHAIN_PREFIX}objcopy")
+set(CMAKE_OBJDUMP      "${TOOLCHAIN_PREFIX}objdump")
 
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 include(pico_sdk_import.cmake)
@@ -72,25 +86,13 @@ set(PICO_SDK_TARGET_LIBS
 )
 message(STATUS "Planning to build SDK libraries: ${PICO_SDK_TARGET_LIBS}")
 
-# --- Toolchain Configuration ---
-# Ensure ARM GCC toolchain executables (arm-none-eabi-gcc etc.) are in your PATH
-# We explicitly pass these to the external project's CMake configuration.
-# set(TOOLCHAIN_PREFIX "arm-none-eabi-")
-set(TOOLCHAIN_PREFIX "${ARM_EMBEDDED_DIR}/bin/arm-none-eabi-")
-set(CMAKE_C_COMPILER   "${TOOLCHAIN_PREFIX}gcc")
-set(CMAKE_CXX_COMPILER "${TOOLCHAIN_PREFIX}g++")
-set(CMAKE_ASM_COMPILER "${TOOLCHAIN_PREFIX}gcc")
-set(CMAKE_AR           "${TOOLCHAIN_PREFIX}ar")
-set(CMAKE_OBJCOPY      "${TOOLCHAIN_PREFIX}objcopy")
-set(CMAKE_OBJDUMP      "${TOOLCHAIN_PREFIX}objdump")
-
 pico_sdk_init()
 # add_library(${LIBRARY_NAME} jartis/src/jartis.c jartis/src/jartis.h)
-add_executable(${LIBRARY_NAME} jartis/src/jartis.c)
+add_executable(${LIBRARY_NAME} jartis-c/jartis.c)
 pico_enable_stdio_usb(${LIBRARY_NAME} 1)
 pico_enable_stdio_uart(${LIBRARY_NAME} 1)
 pico_add_extra_outputs(${LIBRARY_NAME})
 
-target_include_directories(${LIBRARY_NAME} PRIVATE jartis/src)
+target_include_directories(${LIBRARY_NAME} PRIVATE jartis-c)
 target_link_libraries(${LIBRARY_NAME} ${PICO_SDK_TARGET_LIBS})
 
