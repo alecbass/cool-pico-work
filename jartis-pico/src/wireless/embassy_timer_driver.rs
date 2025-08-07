@@ -10,8 +10,8 @@ use embassy_time_driver::Driver;
 use embassy_time_queue_utils::Queue;
 use hal::fugit::MicrosDurationU32;
 use hal::pac::interrupt;
+use hal::timer::Alarm0;
 use hal::timer::{Alarm, Instant, Timer};
-use rp_pico::hal::timer::Alarm0;
 use rp_pico_w::hal;
 
 struct AlarmState {
@@ -46,11 +46,11 @@ embassy_time_driver::time_driver_impl!(static DRIVER: JartisDriver = JartisDrive
 });
 
 impl JartisDriver {
-    fn set_alarm(&self, cs: CriticalSection, at: u64, alarm0: &mut Alarm0) -> bool {
+    fn set_alarm(&self, cs: CriticalSection, timestamp: u64, alarm0: &mut Alarm0) -> bool {
         // Note that we're not checking the high bits at all. This means the irq may fire early
         // if the alarm is more than 72 minutes (2^32 us) in the future. This is OK, since on irq fire
         // it is checked if the alarm time has passed.
-        let instant = Instant::from_ticks(at as u32 as u64);
+        let instant = Instant::from_ticks(timestamp as u32 as u64);
         let alarm = &self.alarm.borrow(cs);
         alarm.timestamp.set(instant);
 
@@ -63,7 +63,7 @@ impl JartisDriver {
         }
 
         let now = self.now();
-        if at <= now {
+        if timestamp <= now {
             // If alarm timestamp has passed the alarm will not fire.
             // Disarm the alarm and return `false` to indicate that.
             warn!("alarm timestamp has passed");
@@ -174,7 +174,6 @@ pub fn init(mut timer: Timer) -> Result<(), TimeDriverError> {
 
         alarm.enable_interrupt();
 
-        // Let the interrupt driver be aware of the PAC's driver
         DRIVER.timer.borrow(cs).replace(Some(timer));
         DRIVER.timer_alarm.borrow(cs).replace(Some(alarm));
 

@@ -45,8 +45,8 @@ pub async fn wireless_main(
     spi0: SPI0,
     pio0: PIO0,
     dma: DMA,
-    mut delay: Delay,
     state: &'static mut cyw43::State,
+    mut delay: Delay,
 ) {
     //
     // Configure pins fro PioSpi
@@ -188,7 +188,6 @@ pub async fn wireless_main(
     // Set up DMA
     let dma = dma.split(&mut resets);
 
-    info!("creating SPI wrapper");
     let spi_wrapper = PioSpiCyw43::new(sm, spi_cs, tx, rx, wrap_target, dma);
 
     let cyw43_firmware = include_bytes!("../../../cyw43/43439A0.bin");
@@ -196,9 +195,16 @@ pub async fn wireless_main(
 
     embassy_futures::yield_now().await;
 
-    // info!("awaiting for timer to await");
-    // Timer::after_secs(1).await;
-    // info!("awaited timer");
+    Timer::after_secs(1).await;
+    info!("awaited timer");
+
+    loop {
+        let instant_now = embassy_time::Instant::now();
+        info!("now: {} {}", instant_now.as_ticks(), instant_now.as_secs());
+
+        delay.delay_ms(50);
+        break;
+    }
 
     // Current error: TIMER_IRQ_0 is not firing so the runner never picks up on the next event
     let (_net_device, mut control, runner) =

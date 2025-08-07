@@ -143,7 +143,7 @@ fn main() -> ! {
 
         executor.run(|spawner| {
             spawner.must_spawn(wireless_main(
-                spawner, pac.RESETS, clocks, pins, pac.SPI0, pac.PIO0, pac.DMA, delay, state,
+                spawner, pac.RESETS, clocks, pins, pac.SPI0, pac.PIO0, pac.DMA, state, delay,
             ));
         });
     }
