@@ -25,26 +25,26 @@ cd build || exit 1
 # Build C library
 cp "${PICO_SDK_PATH}/external/pico_sdk_import.cmake" ..
 
-echo "$arm_embedded_dir"
 export CMAKE_LIBRARY_PATH="$CMAKE_LIBRARY_PATH:$c_lib_dir"
+
+target=$1
+
+if [[ -z $target ]]; then
+    echo "No target specified. Defaulting to Debug"
+    target="Debug"
+fi
 
 # Exporting compile commands creates a compile_commands.json that lets clangd find header files
 cmake \
     -DPICO_BOARD=pico_w \
-    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_BUILD_TYPE="$1" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
     -DARM_EMBEDDED_DIR="$arm_embedded_dir" \
     -DPICO_SDK_PATH="$PICO_SDK_PATH" \
     ..
 make
 
-make_static_library=$1
-
-if [[ -z $make_static_library ]]; then
-    echo "Only building C library, exiting..."
-    exit 0
-fi
-
+# NOTE: Not currently linking a static library to any Rust builds
 exit 0
 
 # NOTE: Make will fail as it attempts to build a .uf2 file

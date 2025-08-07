@@ -64,9 +64,9 @@ set(CMAKE_CXX_STANDARD 17)
 # 2. SDK Libraries to Build: Semicolon-separated list. Adjust as needed.
 set(PICO_SDK_TARGET_LIBS
     pico_stdlib         # Base library, almost always needed
-    # hardware_gpio       # For GPIO control
+    hardware_gpio       # For GPIO control
     # hardware_timer      # For hardware timers, delays
-    # hardware_pwm        # For PWM output
+    hardware_pwm        # For PWM output
     # hardware_adc        # For ADC input
     # hardware_spi        # For SPI communication
     # hardware_i2c        # For I2C communication
@@ -88,7 +88,7 @@ message(STATUS "Planning to build SDK libraries: ${PICO_SDK_TARGET_LIBS}")
 
 pico_sdk_init()
 # add_library(${LIBRARY_NAME} jartis/src/jartis.c jartis/src/jartis.h)
-add_executable(${LIBRARY_NAME} jartis-c/jartis.c)
+add_executable(${LIBRARY_NAME} jartis-c/jartis.c jartis-c/servo.c jartis-c/servo.h)
 pico_enable_stdio_usb(${LIBRARY_NAME} 1)
 pico_enable_stdio_uart(${LIBRARY_NAME} 1)
 pico_add_extra_outputs(${LIBRARY_NAME})
