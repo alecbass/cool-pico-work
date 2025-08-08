@@ -76,7 +76,9 @@ int main() {
         printf("enabled\n");
     }
 
-    free(servo);
+    if (servo != NULL) {
+        free(servo);
+    }
 
     return 0;
 }

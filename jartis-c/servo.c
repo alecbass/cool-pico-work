@@ -37,11 +37,17 @@ Servo* initServo(const uint servoPin) {
     pwm_init(slice_num, &config, false);
     pwm_set_enabled(slice_num, true);
 
-    Servo* servo = malloc(sizeof(Servo));
-    servo->pin = servoPin;
-    servo->degree = 0.0;
+    Servo* servoPtr = malloc(sizeof(Servo));
 
-    return servo;
+    if (servoPtr == NULL) {
+        Servo servo = {
+            .pin = servoPin,
+            .degree = 0.0,
+        };
+        *servoPtr = servo;
+    }
+
+    return servoPtr;
 }
 
 void moveServo(Servo* servo, float degree) {
