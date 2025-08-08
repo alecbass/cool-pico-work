@@ -1,8 +1,8 @@
 #include "hardware/gpio.h"
+#include "pico/cyw43_arch.h"
+#include "pico/stdlib.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include "pico/stdlib.h"
-#include "pico/cyw43_arch.h"
 
 #include "servo.h"
 
@@ -37,10 +37,11 @@ void initButtonIrq(const uint buttonActionPin, const uint buttonListenerPin) {
 
     // Listening pin
     uint32_t interruptFlags = GPIO_IRQ_EDGE_FALL; // \ GPIO_IRQ_EDGE_RISE;
-    gpio_set_irq_enabled_with_callback(buttonListenerPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+    gpio_set_irq_enabled_with_callback(buttonListenerPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true,
+                                       &gpio_callback);
 }
 
-int connectToWifi() {
+int main() {
     stdio_init_all();
     printf("yooooeeeee lol\n");
 
@@ -78,8 +79,4 @@ int connectToWifi() {
     free(servo);
 
     return 0;
-}
-
-int main() {
-    return connectToWifi();
 }

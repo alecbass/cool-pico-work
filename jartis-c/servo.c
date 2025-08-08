@@ -1,11 +1,11 @@
+#include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
-#include "hardware/clocks.h"
 #include <stdio.h>
 
 #include "servo.h"
 
-#define ROTATE_0 700 //Rotate to 0° position
+#define ROTATE_0 700 // Rotate to 0° position
 #define ROTATE_180 2300
 #define MAX_DEGREE 180.0
 
@@ -14,27 +14,28 @@ Servo* initServo(const uint servoPin) {
     pwm_set_gpio_level(servoPin, 0);
     uint slice_num = pwm_gpio_to_slice_num(servoPin);
 
-	// Get clock speed and compute divider for 50 hz
-	uint32_t clk = clock_get_hz(clk_sys);
-	uint32_t div = clk / (20000 * 50);
+    // Get clock speed and compute divider for 50 hz
+    uint32_t clk = clock_get_hz(clk_sys);
+    uint32_t div = clk / (20000 * 50);
 
-	// Check div is in range
-	if ( div < 1 ){
-		div = 1;
-	}
-	if ( div > 255 ){
-		div = 255;
-	}
+    // Check div is in range
+    if (div < 1) {
+        div = 1;
+    }
 
-	pwm_config config = pwm_get_default_config();
-	pwm_config_set_clkdiv(&config, (float)div);
+    if (div > 255) {
+        div = 255;
+    }
 
-	// Set wrap so the period is 20 ms
-	pwm_config_set_wrap(&config, 20000);
+    pwm_config config = pwm_get_default_config();
+    pwm_config_set_clkdiv(&config, (float)div);
 
-	// Load the configuration
-	pwm_init(slice_num, &config, false);
-	pwm_set_enabled(slice_num, true);
+    // Set wrap so the period is 20 ms
+    pwm_config_set_wrap(&config, 20000);
+
+    // Load the configuration
+    pwm_init(slice_num, &config, false);
+    pwm_set_enabled(slice_num, true);
 
     Servo* servo = malloc(sizeof(Servo));
     servo->pin = servoPin;
@@ -44,17 +45,16 @@ Servo* initServo(const uint servoPin) {
 }
 
 void moveServo(Servo* servo, float degree) {
-    if (degree > MAX_DEGREE){
-		return;
-	}
-	if (degree < 0){
-		return;
-	}
+    bool isInvalidDegree = degree > MAX_DEGREE || degree < 0;
 
-	int duty = (((float)(ROTATE_180 - ROTATE_0) / MAX_DEGREE) * degree) + ROTATE_0;
+    if (isInvalidDegree) {
+        return;
+    }
 
-	printf("PWM for %f deg is %d duty\n", degree, duty);
-	pwm_set_gpio_level(servo->pin, duty);
+    int duty = (((float)(ROTATE_180 - ROTATE_0) / MAX_DEGREE) * degree) + ROTATE_0;
+
+    printf("PWM for %f deg is %d duty\n", degree, duty);
+    pwm_set_gpio_level(servo->pin, duty);
     servo->degree = degree;
 }
 

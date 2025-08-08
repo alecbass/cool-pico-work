@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
 typedef struct {
-    uint pin; 
+    uint pin;
     float degree;
 } Servo;
 
