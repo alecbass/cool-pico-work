@@ -58,8 +58,6 @@ void moveServo(Servo* servo, float degree) {
     }
 
     int duty = (((float)(ROTATE_180 - ROTATE_0) / MAX_DEGREE) * degree) + ROTATE_0;
-
-    printf("PWM for %f deg is %d duty\n", degree, duty);
     pwm_set_gpio_level(servo->pin, duty);
     servo->degree = degree;
 }

@@ -1,0 +1,2 @@
+int printToEink();
+int doHammerdraufTest();

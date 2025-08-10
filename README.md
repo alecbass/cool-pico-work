@@ -29,6 +29,9 @@ This repository contains some programs ready to flash onto a PICO. To run them, 
 
 * RFID_FLASHER - Reads and flashes RFID chips. (Doesn't actually lol, this is a work in progress)
 
+# Jartis e-ink display
+Shoutout to [This guy who did a Pico example](https://github.com/hammadrauf/pico_epd_1in54#)
+
 # TODO
 Make the RFID_FLASHER program work with classic RFID tags
 

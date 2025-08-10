@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "eink.h"
 #include "servo.h"
 
 // const char ssid[] = "A Network";
@@ -42,8 +43,10 @@ void initButtonIrq(const uint buttonActionPin, const uint buttonListenerPin) {
 }
 
 int main() {
+    int result = doHammerdraufTest();
+    printf("Test result: %d\n", result);
+    return result;
     stdio_init_all();
-    printf("yooooeeeee lol\n");
 
     /** The pin the custom LED is connected to */
     const uint LED_PIN = 14;
@@ -55,30 +58,34 @@ int main() {
     gpio_set_dir(LED_PIN, GPIO_OUT);
     gpio_put(LED_PIN, true);
 
-    initButtonIrq(BUTTON_ACTION_PIN, BUTTON_LISTENER_PIN);
+    // initButtonIrq(BUTTON_ACTION_PIN, BUTTON_LISTENER_PIN);
 
+#ifdef HAS_SERVO
     servo = initServo(SERVO_PIN);
     moveServo(servo, 0.0);
+#endif
 
-    if (cyw43_arch_init()) {
-        printf("Wi-Fi init failed");
-        return -1;
-    }
+    // if (cyw43_arch_init()) {
+    //     printf("Wi-Fi init failed");
+    //     return -1;
+    // }
+
+    printToEink();
 
     while (true) {
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+        // cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
         gpio_put(LED_PIN, false);
-        printf("disabled\n");
         sleep_ms(1000);
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+        // cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
         gpio_put(LED_PIN, true);
         sleep_ms(1000);
-        printf("enabled\n");
     }
 
+#ifdef HAS_SERVO
     if (servo != NULL) {
         free(servo);
     }
+#endif
 
     return 0;
 }

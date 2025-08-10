@@ -41,6 +41,7 @@ cmake \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
     -DARM_EMBEDDED_DIR="$arm_embedded_dir" \
     -DPICO_SDK_PATH="$PICO_SDK_PATH" \
+    -DHAS_SERVO=0 \
     ..
 make
 
