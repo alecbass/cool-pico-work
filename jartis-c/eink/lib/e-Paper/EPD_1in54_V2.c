@@ -28,6 +28,7 @@
 #
 ******************************************************************************/
 #include "EPD_1in54_V2.h"
+#include "DEV_Config.h"
 #include "Debug.h"
 
 // waveform full refresh
@@ -125,6 +126,7 @@ parameter:
 static void EPD_1IN54_V2_ReadBusy(void)
 {
     Debug("e-Paper busy\r\n");
+    printf("Test: %d %d\n", DEV_Digital_Read(EPD_BUSY_PIN), EPD_BUSY_PIN);
     while(DEV_Digital_Read(EPD_BUSY_PIN) == 1) {      //LOW: idle, HIGH: busy
         DEV_Delay_ms(1);
     }
@@ -140,7 +142,9 @@ static void EPD_1IN54_V2_TurnOnDisplay(void)
     EPD_1IN54_V2_SendCommand(0x22);
     EPD_1IN54_V2_SendData(0xc7);
 	EPD_1IN54_V2_SendCommand(0x20);
+    printf("Sending command\n");
     EPD_1IN54_V2_ReadBusy();
+    printf("Read command\n");
 }
 
 /******************************************************************************

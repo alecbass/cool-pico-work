@@ -24,7 +24,7 @@ void gpio_callback(uint pin, uint32_t events) {
     }
 }
 
-void initButtonIrq(const uint buttonActionPin, const uint buttonListenerPin) {
+int initButtonIrq(const uint buttonActionPin, const uint buttonListenerPin) {
     // Current goes out through GIO16
     gpio_init(buttonActionPin);
     gpio_set_dir(buttonActionPin, GPIO_OUT);
@@ -40,12 +40,14 @@ void initButtonIrq(const uint buttonActionPin, const uint buttonListenerPin) {
     uint32_t interruptFlags = GPIO_IRQ_EDGE_FALL; // \ GPIO_IRQ_EDGE_RISE;
     gpio_set_irq_enabled_with_callback(buttonListenerPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true,
                                        &gpio_callback);
+
+    return 0;
 }
 
 int main() {
-    int result = doHammerdraufTest();
-    printf("Test result: %d\n", result);
-    return result;
+    // int result = doHammerdraufTest();
+    // printf("Test result: %d\n", result);
+    // return result;
     stdio_init_all();
 
     /** The pin the custom LED is connected to */
@@ -73,10 +75,10 @@ int main() {
     printToEink();
 
     while (true) {
-        // cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
         gpio_put(LED_PIN, false);
         sleep_ms(1000);
-        // cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
         gpio_put(LED_PIN, true);
         sleep_ms(1000);
     }

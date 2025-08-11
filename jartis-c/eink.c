@@ -7,6 +7,7 @@ int printToEink() {
     printf("Starting EPD.......\r\n");
 
     DEV_Delay_ms(500);
+    DEV_Delay_ms(500);
 
     // gpio_init(17);
     // gpio_set_dir(17, GPIO_OUT);
@@ -37,7 +38,7 @@ int printToEink() {
     // const uint BUSY_PIN = 22;
     // gpio_init(BUSY_PIN);
     // gpio_set_dir(BUSY_PIN, GPIO_IN);
-    // gpio_put(BUSY_PIN, true);
+    // gpio_put(BUSY_PIN, false);
     // gpio_pull_down(BUSY_PIN);
 
     int testResult = EPD_1in54_V2_test();
@@ -54,8 +55,10 @@ int printToEink() {
 
     // The image of the previous frame must be uploaded, otherwise the
     // first few seconds will display an exception.
-    EPD_1IN54_V2_DisplayPartBaseImage(BlackImage);
-    EPD_1IN54_V2_Init_Partial();
+    // EPD_1IN54_V2_DiplayPartBaseImage(BlackImage);
+    // EPD_1IN54_V2_Init();
+    EPD_1IN54_V2_Init();
+    EPD_1IN54_V2_Clear();
 
     printf("Displayed image\n");
     return 0;
@@ -66,7 +69,7 @@ int doHammerdraufTest() {
     stdio_init_all();
     printf("Pico Started, will wait 1 minute before EPD actions...\r\n");
 
-    const uint LED_PIN = PICO_DEFAULT_LED_PIN_INVERTED;
+    const uint LED_PIN = 14;
     // const uint LED_PIN = 25;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -98,7 +101,7 @@ int doHammerdraufTest() {
     Paint_SelectImage(BlackImage);
     Paint_Clear(WHITE);
     // enter partial mode
-    EPD_1IN54_V2_Init_Partial();
+    EPD_1IN54_V2_Init();
     printf("Partial refresh\r\n");
 
     printf("Going to blink LED now, and brief animation of letter 'A'.......\r\n");

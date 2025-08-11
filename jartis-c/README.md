@@ -7,3 +7,5 @@ GPIO16: Goes to one side of button
 GPIO17: Receives from the same button
 GND: Connected to servo
 VCC: Connected to servo
+
+

@@ -28,6 +28,8 @@
 #
 ******************************************************************************/
 #include "DEV_Config.h"
+#include <hardware/gpio.h>
+#include <hardware/spi.h> // Can remove?
 
 #define SPI_PORT spi0
 
@@ -118,22 +120,91 @@ UBYTE DEV_Module_Init(void)
 	// GPIO Config
 	DEV_GPIO_Init();
 	
-	// Initialize SPI port at 1 MHz
-    spi_init(SPI_PORT, 1000 * 1000);
-	
-	// Set SPI format
-    spi_set_format( SPI_PORT,   // SPI instance
-                    8,      // Number of bits per transfer
-                    0,      // Polarity (CPOL)
-                    0,      // Phase (CPHA)
-                    SPI_MSB_FIRST);
+    // spi_init(SPI_PORT, 4000 * 1000);
+    //
+    // Set SPI format
+    // spi_set_format( SPI_PORT,   // SPI instance
+    //                 8,      // Number of bits per transfer
+    //                 0,      // Polarity (CPOL)
+    //                 0,      // Phase (CPHA)
+    //                 SPI_MSB_FIRST);
+    gpio_set_function(EPD_CLK_PIN, GPIO_OUT);
+    gpio_set_function(EPD_MOSI_PIN, GPIO_OUT);
 
-    gpio_set_function(EPD_CLK_PIN, GPIO_FUNC_SPI);
-    gpio_set_function(EPD_MOSI_PIN, GPIO_FUNC_SPI);
+    DEV_SPI_Init();
+
+    // gpio_set_function(EPD_CLK_PIN, GPIO_FUNC_SPI);
+    // gpio_set_function(EPD_MOSI_PIN, GPIO_FUNC_SPI);
 	
     printf("DEV_Module_Init OK \r\n");
 	return 0;
 }
+
+void DEV_GPIO_Init_1(void)
+{
+    spi_deinit(SPI_PORT);
+    gpio_set_function(EPD_CLK_PIN, GPIO_FUNC_SPI);
+    gpio_set_function(EPD_MOSI_PIN, GPIO_FUNC_SPI);
+}
+
+void DEV_SPI_Init(void)
+{
+    spi_init(SPI_PORT, 4000 * 1000);
+    gpio_set_function(EPD_CLK_PIN, GPIO_FUNC_SPI);
+    gpio_set_function(EPD_MOSI_PIN, GPIO_FUNC_SPI);
+}
+
+
+void DEV_SPI_SendData(UBYTE Reg)
+{
+	UBYTE i,j=Reg;
+	DEV_GPIO_Mode(EPD_MOSI_PIN, 1);
+    DEV_GPIO_Mode(EPD_CLK_PIN, 1);
+	DEV_Digital_Write(EPD_CS_PIN, 0);
+	for(i = 0; i<8; i++)
+    {
+        DEV_Digital_Write(EPD_CLK_PIN, 0);     
+        if (j & 0x80)
+        {
+            DEV_Digital_Write(EPD_MOSI_PIN, 1);
+        }
+        else
+        {
+            DEV_Digital_Write(EPD_MOSI_PIN, 0);
+        }
+        
+        DEV_Digital_Write(EPD_CLK_PIN, 1);
+        j = j << 1;
+    }
+	DEV_Digital_Write(EPD_CLK_PIN, 0);
+	DEV_Digital_Write(EPD_CS_PIN, 1);
+}
+
+UBYTE DEV_SPI_ReadData(void)
+{
+	UBYTE i,j=0xff;
+	DEV_GPIO_Mode(EPD_MOSI_PIN, 0);
+    DEV_GPIO_Mode(EPD_CLK_PIN, 1);
+	DEV_Digital_Write(EPD_CS_PIN, 0);
+	for(i = 0; i<8; i++)
+	{
+		DEV_Digital_Write(EPD_CLK_PIN, 0);
+		j = j << 1;
+		if (DEV_Digital_Read(EPD_MOSI_PIN))
+		{
+            j = j | 0x01;
+		}
+		else
+		{
+            j= j & 0xfe;
+		}
+		DEV_Digital_Write(EPD_CLK_PIN, 1);
+	}
+	DEV_Digital_Write(EPD_CLK_PIN, 0);
+	DEV_Digital_Write(EPD_CS_PIN, 1);
+	return j;
+}
+
 
 /******************************************************************************
 function:	Module exits, closes SPI and BCM2835 library
