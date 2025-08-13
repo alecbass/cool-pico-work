@@ -31,7 +31,7 @@
 #include <hardware/gpio.h>
 #include <hardware/spi.h> // Can remove?
 
-#define SPI_PORT spi1
+#define SPI_PORT spi0
 
 /**
  * GPIO
@@ -149,7 +149,7 @@ void DEV_GPIO_Init_1(void)
 
 void DEV_SPI_Init(void)
 {
-    spi_init(SPI_PORT, 1000 * 1000);
+    spi_init(SPI_PORT, 4000 * 1000);
     // spi_set_format( SPI_PORT,   // SPI instance
     //                 8,      // Number of bits per transfer
     //                 0,      // Polarity (CPOL)
