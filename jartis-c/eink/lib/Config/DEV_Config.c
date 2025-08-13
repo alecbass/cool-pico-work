@@ -119,22 +119,7 @@ UBYTE DEV_Module_Init(void)
 
 	// GPIO Config
 	DEV_GPIO_Init();
-	
-    // spi_init(SPI_PORT, 1000 * 1000);
-    
-    // Set SPI format
-    // spi_set_format( SPI_PORT,   // SPI instance
-    //                 8,      // Number of bits per transfer
-    //                 0,      // Polarity (CPOL)
-    //                 0,      // Phase (CPHA)
-    //                 SPI_MSB_FIRST);
-    // gpio_set_function(EPD_CLK_PIN, GPIO_OUT);
-    // gpio_set_function(EPD_MOSI_PIN, GPIO_OUT);
-
     DEV_SPI_Init();
-
-    // gpio_set_function(EPD_CLK_PIN, GPIO_FUNC_SPI);
-    // gpio_set_function(EPD_MOSI_PIN, GPIO_FUNC_SPI);
 	
     printf("DEV_Module_Init OK \r\n");
 	return 0;
@@ -150,11 +135,6 @@ void DEV_GPIO_Init_1(void)
 void DEV_SPI_Init(void)
 {
     spi_init(SPI_PORT, 4000 * 1000);
-    // spi_set_format( SPI_PORT,   // SPI instance
-    //                 8,      // Number of bits per transfer
-    //                 0,      // Polarity (CPOL)
-    //                 0,      // Phase (CPHA)
-    //                 SPI_MSB_FIRST);
     gpio_set_function(EPD_CLK_PIN, GPIO_FUNC_SPI);
     gpio_set_function(EPD_MOSI_PIN, GPIO_FUNC_SPI);
 }
