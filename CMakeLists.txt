@@ -95,7 +95,7 @@ set(EINK_TARGET_LIBS
 #
 
 # add_library(${LIBRARY_NAME} jartis/src/jartis.c jartis/src/jartis.h)
-add_executable(${LIBRARY_NAME} jartis-c/main.c jartis-c/servo.c jartis-c/servo.h jartis-c/eink.h jartis-c/eink.c)
+add_executable(${LIBRARY_NAME} jartis-c/main.c jartis-c/atmospheric_sensor.c jartis-c/atmospheric_sensor.h jartis-c/servo.c jartis-c/servo.h jartis-c/eink.h jartis-c/eink.c)
 pico_enable_stdio_usb(${LIBRARY_NAME} 1)
 pico_enable_stdio_uart(${LIBRARY_NAME} 1)
 pico_add_extra_outputs(${LIBRARY_NAME})

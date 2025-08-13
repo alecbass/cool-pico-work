@@ -1,184 +1,128 @@
+#include "DEV_Config.h"
 #include "EPD_1in54b.h"
-#include "EPD_1in54b_V2.h"
 #include "EPD_Test.h"
+#include "GUI_Paint.h"
+#include "eink/lib/Fonts/fonts.h"
 #include <hardware/gpio.h>
 #include <pico/stdlib.h>
 
-int printToEink() {
+#include "atmospheric_sensor.h"
+#include "eink.h"
+
+Eink* initEink() {
     printf("Starting EPD.......\r\n");
 
     DEV_Delay_ms(500);
-    DEV_Delay_ms(500);
 
-    // gpio_init(17);
-    // gpio_set_dir(17, GPIO_OUT);
-    // gpio_put(17, false);
-    // gpio_pull_down(17);
-    //
-    // gpio_init(18);
-    // gpio_set_dir(18, GPIO_OUT);
-    // gpio_put(18, false);
-    // gpio_pull_down(18);
-    //
-    // gpio_init(19);
-    // gpio_set_dir(19, GPIO_OUT);
-    // gpio_put(19, false);
-    // gpio_pull_down(19);
-    //
-    // gpio_init(20);
-    // gpio_set_dir(20, GPIO_OUT);
-    // gpio_put(20, false);
-    // gpio_pull_down(20);
-    //
-    // const uint RST_PIN = 21;
-    // gpio_init(RST_PIN);
-    // gpio_set_dir(RST_PIN, GPIO_OUT);
-    // gpio_put(RST_PIN, false);
-    // gpio_pull_down(RST_PIN);
-    //
-    // const uint BUSY_PIN = 22;
-    // gpio_init(BUSY_PIN);
-    // gpio_set_dir(BUSY_PIN, GPIO_IN);
-    // gpio_put(BUSY_PIN, false);
-    // gpio_pull_down(BUSY_PIN);
+    // int testResult = EPD_1in54b_test();
+    // printf("Test result: %d\n", testResult);
 
-    int testResult = EPD_1in54b_test();
-    printf("Test result: %d\n", testResult);
-    return 0;
-
-    testResult = EPD_1in54b_V2_test();
-    printf("Test result: %d\n", testResult);
-
-    UWORD Imagesize = ((EPD_1IN54B_V2_WIDTH % 8 == 0) ? (EPD_1IN54B_V2_WIDTH / 8) : (EPD_1IN54B_V2_WIDTH / 8 + 1)) *
-                      EPD_1IN54B_V2_HEIGHT;
+    UWORD Imagesize =
+        ((EPD_1IN54B_WIDTH % 8 == 0) ? (EPD_1IN54B_WIDTH / 8) : (EPD_1IN54B_WIDTH / 8 + 1)) * EPD_1IN54B_HEIGHT;
     UBYTE* BlackImage = (UBYTE*)malloc(Imagesize);
+    UBYTE* RedImage = (UBYTE*)malloc(Imagesize);
 
     if (BlackImage == NULL) {
         printf("Failed to apply for black memory...\r\n");
-        return -1;
+        return NULL;
     }
 
-    // The image of the previous frame must be uploaded, otherwise the
-    // first few seconds will display an exception.
-    // EPD_1IN54_V2_DiplayPartBaseImage(BlackImage);
-    // EPD_1IN54_V2_Init();
-    EPD_1IN54B_V2_Init();
-    EPD_1IN54B_V2_Clear();
+    if (RedImage == NULL) {
+        printf("Failed to apply for red memory...\r\n");
+        free(BlackImage);
+        return NULL;
+    }
 
+    printf("EPD_1in54b_test Demo\r\n");
+    if (DEV_Module_Init() != 0) {
+        free(BlackImage);
+        free(RedImage);
+        return NULL;
+    }
+
+    printf("e-Paper Init and Clear...\r\n");
+    EPD_1IN54B_Init();
+    EPD_1IN54B_Clear();
+    printf("e-Paper inited and cleared...\r\n");
+    DEV_Delay_ms(500);
+
+    Paint_NewImage(BlackImage, EPD_1IN54B_WIDTH, EPD_1IN54B_HEIGHT, 270, WHITE);
+    Paint_NewImage(RedImage, EPD_1IN54B_WIDTH, EPD_1IN54B_HEIGHT, 270, WHITE);
+
+    // printf("show window BMP-----------------\r\n");
+    // printf("read black bmp\r\n");
+    // Paint_SelectImage(BlackImage);
+    // // GUI_ReadBmp("./pic/100x100.bmp", 50, 50);
+    //
+    // Paint_SelectImage(RedImage);
+    // Paint_Clear(WHITE);
+    //
+    // EPD_1IN54B_Display(BlackImage, RedImage);
+    // DEV_Delay_ms(2000);
+    //
+    // printf("show bmp------------------------\r\n");
+    // printf("read black bmp\r\n");
+    // Paint_SelectImage(BlackImage);
+    // // GUI_ReadBmp("./pic/1in54b-b.bmp", 0, 0);
+    // printf("read red bmp\r\n");
+    // Paint_SelectImage(RedImage);
+    // // GUI_ReadBmp("./pic/1in54b-r.bmp", 0, 0);
+    //
+    // EPD_1IN54B_Display(BlackImage, RedImage);
+    // DEV_Delay_ms(2000);
+
+    // printf("Drawing------------------------\r\n");
+    // Paint_SelectImage(BlackImage);
+    // Paint_Clear(WHITE);
+    // Paint_DrawPoint(5, 10, BLACK, DOT_PIXEL_1X1, DOT_STYLE_DFT);
+    // Paint_DrawPoint(5, 25, BLACK, DOT_PIXEL_2X2, DOT_STYLE_DFT);
+    // Paint_DrawLine(20, 10, 70, 60, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+    // Paint_DrawLine(70, 10, 20, 60, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+    // Paint_DrawRectangle(20, 10, 70, 60, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+    // Paint_DrawCircle(170, 85, 20, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    // Paint_DrawString_EN(5, 70, "hello world", &Font16, WHITE, BLACK);
+    // Paint_DrawString_CN(5, 160, "Î¢Ñ©µç×Ó", &Font24CN, WHITE, BLACK);
+    //
+    // Paint_SelectImage(RedImage);
+    // Paint_Clear(WHITE);
+    // Paint_DrawPoint(5, 40, BLACK, DOT_PIXEL_3X3, DOT_STYLE_DFT);
+    // Paint_DrawPoint(5, 55, BLACK, DOT_PIXEL_4X4, DOT_STYLE_DFT);
+    // Paint_DrawLine(170, 15, 170, 55, BLACK, DOT_PIXEL_1X1, LINE_STYLE_DOTTED);
+    // Paint_DrawLine(150, 35, 190, 35, BLACK, DOT_PIXEL_1X1, LINE_STYLE_DOTTED);
+    // Paint_DrawRectangle(85, 10, 130, 60, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    // Paint_DrawCircle(170, 35, 20, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+    // Paint_DrawString_EN(5, 90, "waveshare", &Font20, BLACK, WHITE);
+    // Paint_DrawNum(5, 120, 123456789, &Font20, BLACK, WHITE);
+    // Paint_DrawString_CN(5, 135, "ÄãºÃabc", &Font12CN, BLACK, WHITE);
+
+    // EPD_1IN54B_Display(BlackImage, RedImage);
+    DEV_Delay_ms(2000);
     printf("Displayed image\n");
-    return 0;
+
+    Eink* eink = malloc(sizeof(Eink));
+    eink->BlackImage = BlackImage;
+    eink->RedImage = RedImage;
+
+    return eink;
 }
 
-// int doHammerdraufTest() {
-//     // Initialize chosen serial port
-//     stdio_init_all();
-//     printf("Pico Started, will wait 1 minute before EPD actions...\r\n");
-//
-//     const uint LED_PIN = 14;
-//     // const uint LED_PIN = 25;
-//     gpio_init(LED_PIN);
-//     gpio_set_dir(LED_PIN, GPIO_OUT);
-//
-//     // Blink Once
-//     gpio_put(LED_PIN, 1);
-//     sleep_ms(250);
-//     gpio_put(LED_PIN, 0);
-//     sleep_ms(250);
-//     // sleep_ms(60*1000);
-//     printf("Starting EPD.......\r\n");
-//
-//     DEV_Delay_ms(500);
-//
-//     int testResult = EPD_1in54_V2_test();
-//     printf("Test result: %d\n", testResult);
-//
-//     UBYTE* BlackImage;
-//     UWORD Imagesize =
-//         ((EPD_1IN54_V2_WIDTH % 8 == 0) ? (EPD_1IN54_V2_WIDTH / 8) : (EPD_1IN54_V2_WIDTH / 8 + 1)) *
-//         EPD_1IN54_V2_HEIGHT;
-//     if ((BlackImage = (UBYTE*)malloc(Imagesize)) == NULL) {
-//         printf("Failed to apply for black memory...\r\n");
-//         return -1;
-//     }
-//
-//     // The image of the previous frame must be uploaded, otherwise the
-//     // first few seconds will display an exception.
-//     EPD_1IN54_V2_DisplayPartBaseImage(BlackImage);
-//     Paint_SelectImage(BlackImage);
-//     Paint_Clear(WHITE);
-//     // enter partial mode
-//     EPD_1IN54_V2_Init();
-//     EPD_1IN54B_V2_Init();
-//     printf("Partial refresh\r\n");
-//
-//     printf("Going to blink LED now, and brief animation of letter 'A'.......\r\n");
-//     int xpos = 0;
-//     int ypos = 0;
-//     int xinc = 17;
-//     int yinc = 24;
-//     int xfact = 1;
-//     int yfact = 1;
-//     int ledval = 1;
-//     int countdown = 100;
-//     bool lastTime = true;
-//     while (true) {
-//         // Keep Blinking
-//         gpio_put(LED_PIN, ledval);
-//
-//         // Animate the character (countdown) times.
-//         if (countdown > 0) {
-//             // sleep_ms(250);
-//             Paint_ClearWindows(xpos, ypos, xpos + Font24.Width, ypos + Font24.Height, WHITE);
-//             Paint_DrawChar(xpos, ypos, 'A', &Font24, BLACK, WHITE);
-//             EPD_1IN54_V2_DisplayPart(BlackImage);
-//             DEV_Delay_ms(100);
-//
-//             // gpio_put(LED_PIN, 0);
-//             Paint_ClearWindows(xpos, ypos, xpos + Font24.Width, ypos + Font24.Height, WHITE);
-//             Paint_DrawChar(xpos, ypos, ' ', &Font24, BLACK, WHITE);
-//             // sleep_ms(2000);
-//             EPD_1IN54_V2_DisplayPart(BlackImage);
-//             DEV_Delay_ms(100);
-//
-//             if (xpos >= 0 && xpos + (xfact * xinc) <= EPD_1IN54_V2_WIDTH - 1)
-//                 xfact = xfact;
-//             if (xpos >= 0 && xpos + (xfact * xinc) > EPD_1IN54_V2_WIDTH - 1)
-//                 xfact = -1 * xfact;
-//             if (xpos < 0)
-//                 xfact = -1 * xfact;
-//             // Update x-position
-//             xpos = xpos + (xfact * xinc);
-//
-//             if (ypos >= 0 && ypos + (yfact * yinc) <= EPD_1IN54_V2_HEIGHT - 1)
-//                 yfact = yfact;
-//             if (ypos >= 0 && ypos + (yfact * yinc) > EPD_1IN54_V2_HEIGHT - 1)
-//                 yfact = -1 * yfact;
-//             if (ypos < 0)
-//                 yfact = -1 * yfact;
-//             // Update y-position
-//             ypos = ypos + (yfact * yinc);
-//
-//             countdown = countdown - 1;
-//         } else if (lastTime) {
-//             EPD_1IN54_V2_Init();
-//             EPD_1IN54_V2_Clear();
-//
-//             printf("Goto Sleep...\r\n");
-//             EPD_1IN54_V2_Sleep();
-//             free(BlackImage);
-//             BlackImage = NULL;
-//             DEV_Delay_ms(2000); // important, at least 2s
-//             // close 5V
-//             printf("close 5V, Module enters 0 power consumption ...\r\n");
-//             DEV_Module_Exit();
-//
-//             lastTime = !(lastTime);
-//         } else
-//             sleep_ms(500);
-//
-//         // flip LED state in next iteration
-//         ledval = ledval ^ 1;
-//     }
-//
-//     return 0;
-// }
+void printTemperature(Eink* eink, TemperatureReading reading) {
+    char temperatureStringBuffer[6];
+    sprintf(temperatureStringBuffer, "%.2fc", reading.temperature);
+
+    bool isHot = reading.temperature > 20.0;
+    Paint_Clear(WHITE);
+    Paint_SelectImage(isHot ? eink->RedImage : eink->BlackImage);
+    Paint_Clear(WHITE);
+    Paint_DrawString_EN(0, 40, "JARTIS TEMPERATURE", &Font16, WHITE, BLACK);
+    Paint_DrawString_EN(40, 100, temperatureStringBuffer, &Font16, WHITE, BLACK);
+
+    if (isHot) {
+        Paint_DrawCircle(20, 180, 20, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+        Paint_DrawCircle(180, 180, 20, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+        Paint_DrawString_EN(40, 160, "IT'S HOT!!", &Font16, WHITE, RED);
+    }
+
+    printf("Displaying...\n");
+    EPD_1IN54B_Display(eink->BlackImage, eink->RedImage);
+}

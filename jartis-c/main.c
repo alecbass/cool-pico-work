@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "atmospheric_sensor.h"
 #include "eink.h"
 #include "servo.h"
 
@@ -72,7 +73,19 @@ int main() {
     //     return -1;
     // }
 
-    printToEink();
+    Eink* eink = initEink();
+
+    for (int i = 0; i < 10; i += 6) {
+        TemperatureReading reading = getTemperatureReading();
+        reading.temperature += i;
+        printf("Temperature: %.2fc\n", reading.temperature);
+        printTemperature(eink, reading);
+        sleep_ms(2000);
+    }
+
+    free(eink->BlackImage);
+    free(eink->RedImage);
+    free(eink);
 
     while (true) {
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
