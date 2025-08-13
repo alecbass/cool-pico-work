@@ -1,12 +1,13 @@
 /*****************************************************************************
-* | File      	:	  EPD_Test.h
+* | File      	:   EPD_1in54b_V2.h
 * | Author      :   Waveshare team
-* | Function    :   e-Paper test Demo
+* | Function    :   1.54inch e-paper b V2
 * | Info        :
 *----------------
 * |	This version:   V1.0
-* | Date        :   2019-06-11
-* | Info        :   
+* | Date        :   2020-04-02
+* | Info        :
+* -----------------------------------------------------------------------------
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documnetation files (the "Software"), to deal
@@ -27,18 +28,18 @@
 # THE SOFTWARE.
 #
 ******************************************************************************/
-#ifndef _EPD_TEST_H_
-#define _EPD_TEST_H_
+#ifndef __EPD_1IN54B_V2_H_
+#define __EPD_1IN54B_V2_H_
 
 #include "DEV_Config.h"
-#include "GUI_Paint.h"
-#include "ImageData.h"
-#include "Debug.h"
-#include <stdlib.h> // malloc() free()
 
-/** Included by me */
-int EPD_1in54_V2_test(void);
-int EPD_1in54b_V2_test(void);
-int EPD_1in54b_test(void);
+// Display resolution
+#define EPD_1IN54B_V2_WIDTH       200
+#define EPD_1IN54B_V2_HEIGHT      200
+
+void EPD_1IN54B_V2_Init(void);
+void EPD_1IN54B_V2_Clear(void);
+void EPD_1IN54B_V2_Display(const UBYTE *blackimage, const UBYTE *redimage);
+void EPD_1IN54B_V2_Sleep(void);
 
 #endif

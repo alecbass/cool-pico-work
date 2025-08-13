@@ -27,7 +27,7 @@
 # THE SOFTWARE.
 #
 ******************************************************************************/
-#include "EPD_1in54_V2.h"
+#include "EPD_1in54_V2_pico.h"
 #include "DEV_Config.h"
 #include "Debug.h"
 

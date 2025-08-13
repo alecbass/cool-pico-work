@@ -14,6 +14,7 @@ add_subdirectory(examples)
 include_directories(examples)
 include_directories(./lib/Config)
 include_directories(./lib/GUI)
+include_directories(./lib/e-Paper)
 
 # generate an executable file
 add_executable(epd 
